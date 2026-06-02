@@ -1,0 +1,11 @@
+[project]
+name = "raster-to-plotter-svg"
+version = "0.1.0"
+description = "Convert a raster image to a plotter-ready SVG of stippled dots"
+requires-python = ">=3.14"
+dependencies = [
+    "customtkinter>=5.2.2",
+    "numpy>=2.4.6",
+    "pillow>=12.2.0",
+    "svgwrite>=1.4.3",
+]
