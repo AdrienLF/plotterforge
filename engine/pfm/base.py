@@ -46,6 +46,7 @@ class PFM:
             if on_progress:
                 on_progress("styling", 0.6)
             items = STYLES[self.style](sites, weights, vals, (w, h))
+        items = list(items)
 
         if on_progress:
             on_progress("distributing", 0.85)
@@ -56,6 +57,28 @@ class PFM:
         if on_progress:
             on_progress("done", 1.0)
         return drawing
+
+
+def generate_items(pfm: "PFM", work: Image.Image, values: dict, seed: int,
+                   bounds: tuple[int, int]) -> list:
+    """Run a PFM's generation stage on an already-prepared raster (no
+    distribution/clipping). Used by Composite PFMs to invoke other modules."""
+    vals = validate(pfm.params, values)
+    if pfm.generate is not None:
+        return list(pfm.generate(work, vals, seed, bounds))
+    sites, weights = SAMPLERS[pfm.family].run(work, vals, seed)
+    return list(STYLES[pfm.style](sites, weights, vals, bounds))
+
+
+def offset_items(items: list, dx: float, dy: float) -> list:
+    """Translate every dot/path in a list of Items in place."""
+    for it in items:
+        if it.dot is not None:
+            it.dot.x += dx
+            it.dot.y += dy
+        if it.path is not None:
+            it.path.points = [(x + dx, y + dy) for x, y in it.path.points]
+    return items
 
 
 REGISTRY: dict[str, PFM] = {}
