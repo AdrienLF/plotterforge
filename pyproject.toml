@@ -8,4 +8,17 @@ dependencies = [
     "numpy>=2.4.6",
     "pillow>=12.2.0",
     "svgwrite>=1.4.3",
+    "flask>=3.0",
+    "pyserial>=3.5",
+    "svgelements>=1.8",
+    "scipy>=1.13",
+    "scikit-image>=0.24",
+    "opencv-python-headless>=4.10",
+]
+
+[project.optional-dependencies]
+# Optional GPU acceleration (Metal/MPS on macOS, CUDA on Linux).
+# Install with: uv sync --extra gpu
+gpu = [
+    "torch>=2.4",
 ]

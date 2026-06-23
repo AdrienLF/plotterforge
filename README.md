@@ -4,6 +4,34 @@ Converts a raster image into a plotter-ready SVG of filled circles. Transparency
 
 ![screenshot placeholder](docs/screenshot.png)
 
+## Plotter Studio (web app)
+
+A professional, DrawingBotV3-style studio lives in `engine/` (the conversion
+engine) + `frontend/` (a Svelte 5 SPA) + `web/server.py` (Flask API + plotter
+driver). It offers a library of configurable **Path Finding Modules**, a
+**Drawing Area** model, multi-pen **Drawing Sets**, and snapshot **Version
+Control** — with optional GPU acceleration.
+
+```sh
+uv sync                       # engine + web deps (add --extra gpu for Torch/MPS)
+cd frontend && npm install && npm run build   # builds the SPA into web/static/app
+cd .. && uv run python -m web.server          # serves UI + API on the Tailscale host
+```
+
+For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
+`/api` to the Flask server).
+
+- **Path Finding Modules (first wave, ~23):** Voronoi / LBG / Adaptive samplers ×
+  Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus the
+  ported Grid Halftone and Random Stipple. Every module's settings are
+  auto-generated from a typed schema (`engine/params.py`).
+- **GPU:** `engine/accel.py` uses Torch (Metal/MPS or CUDA) for the heavy
+  nearest-site / weighted-centroid stages when available, falling back to
+  numpy/scipy otherwise. The status bar shows the active backend.
+- **Integration:** a module produces a `Drawing` → `engine/svg_io.py` writes a
+  multi-layer mm SVG → the existing `_plot_worker` in `web/server.py` plots it,
+  unchanged. Projects/versions are stored under `~/.plotter_studio/`.
+
 ## Requirements
 
 - Python 3.14+
@@ -101,11 +129,14 @@ Notes:
 ## Project layout
 
 ```
-main.py        GUI application (customtkinter)
-stipple.py     grid_halftone() and random_stipple() — return (x, y, radius) lists
-svg_export.py  export_svg() — scales pixel coordinates to mm and writes the SVG
-pyproject.toml uv project manifest
+engine/        Plotter Studio engine: PFMs, samplers, styles, pens, drawing area,
+               version control, GPU/CPU backend, SVG output
+frontend/      Svelte 5 SPA (Photoshop-style UI); `npm run build` → web/static/app
+web/           Flask API + plotter driver (serves the SPA, runs the engine, plots)
+main.py        Legacy GUI application (customtkinter)
+stipple.py     legacy grid_halftone()/random_stipple() — superseded by engine/pfm/grid.py
+svg_export.py  legacy export_svg() — superseded by engine/svg_io.py
+pyproject.toml uv project manifest (engine + web deps; `gpu` extra adds Torch)
 uv.lock        locked dependency tree
-web/           Flask web UI for plotting directly from the Pi
 bridge/        wireless serial bridge: drive the plotter from Mac Inkscape (see bridge/README.md)
 ```

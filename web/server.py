@@ -1,9 +1,19 @@
-import os, json, threading, queue, time, tempfile, re
+import os, json, threading, queue, time, tempfile, re, io, zipfile, base64
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import serial
-from flask import Flask, render_template, request, jsonify, Response, stream_with_context
+from flask import (
+    Flask, render_template, request, jsonify, Response, stream_with_context,
+    send_file, send_from_directory,
+)
+
+from engine import accel, svg_io
+from engine.canvas import DrawingArea, AREA_PRESETS
+from engine.pens import DrawingSet, PEN_LIBRARIES, library_pens
+from engine.params import schema_json, validate
+from engine.pfm import REGISTRY, get as get_pfm, list_pfms
+from engine.project import get_or_create
 
 app = Flask(__name__)
 
@@ -51,6 +61,12 @@ _stop_event  = threading.Event()
 _events      = queue.Queue(maxsize=300)
 _current_svg = None   # bytes
 _placement   = {'x': 0.0, 'y': 0.0}  # mm offset from page top-left
+
+# ── Studio state (image → PFM → drawing) ───────────────────────────────────────
+_project        = get_or_create('default')
+_drawing        = None    # last engine.Drawing produced
+_process_thread = None
+_process_lock   = threading.Lock()
 
 def emit(t, **kw):
     try:
@@ -357,8 +373,14 @@ def _plot_worker(svg_bytes, settings):
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
+SPA_DIR = Path(app.static_folder) / 'app'
+
 @app.route('/')
 def index():
+    spa = SPA_DIR / 'index.html'
+    if spa.exists():
+        return send_file(spa)
+    # Fallback to the legacy template until the SPA is built.
     return render_template('index.html', cfg=cfg)
 
 @app.route('/api/upload', methods=['POST'])
@@ -502,6 +524,197 @@ def manual():
     except Exception as exc:
         return jsonify(error=str(exc)), 500
 
+# ── Studio: image → PFM → drawing ──────────────────────────────────────────────
+
+def _area_from(data):
+    """Update the project's drawing area from a request dict, persist, return it."""
+    if data:
+        _project.area = DrawingArea.from_dict({**_project.area.to_dict(), **data})
+    return _project.area
+
+def _drawing_set_from(data):
+    if data:
+        _project.drawing_set = DrawingSet.from_dict(data)
+    return _project.drawing_set
+
+@app.route('/api/image', methods=['POST'])
+def api_image():
+    f = request.files.get('file')
+    if not f:
+        return jsonify(error='No file'), 400
+    data = f.read()
+    try:
+        from PIL import Image
+        im = Image.open(io.BytesIO(data))
+        w, h = im.size
+    except Exception as exc:
+        return jsonify(error=f'Not a readable image: {exc}'), 400
+    _project.set_image(data, f.filename)
+    b64 = base64.b64encode(data).decode('ascii')
+    mime = f.mimetype or 'image/png'
+    return jsonify(ok=True, width=w, height=h, name=f.filename,
+                   data_url=f'data:{mime};base64,{b64}')
+
+@app.route('/api/pfm/list')
+def api_pfm_list():
+    return jsonify(pfms=list_pfms(), backend=accel.backend_name())
+
+@app.route('/api/pfm/<pfm_id>/schema')
+def api_pfm_schema(pfm_id):
+    if pfm_id not in REGISTRY:
+        return jsonify(error='Unknown PFM'), 404
+    p = get_pfm(pfm_id)
+    return jsonify(id=p.id, name=p.name, family=p.family, style=p.style,
+                   params=schema_json(p.params))
+
+def _process_worker(pfm_id, params, seed):
+    global _drawing, _current_svg
+    try:
+        emit('proc', state='running', pfm=pfm_id)
+        img = _project.open_image()
+        if img is None:
+            emit('proc', state='error', msg='No image loaded')
+            return
+        pfm = get_pfm(pfm_id)
+
+        def on_progress(stage, frac):
+            emit('proc', state='progress', stage=stage, frac=frac)
+
+        drawing = pfm.run(img, _project.area, _project.drawing_set,
+                          params, seed=seed, on_progress=on_progress)
+        svg = svg_io.to_svg(drawing)
+        _drawing = drawing
+        _current_svg = svg.encode()           # so /api/plot can plot it directly
+        _project.pfm_id = pfm_id
+        _project.params = validate(pfm.params, params)
+        _project.save()
+        per_pen = [{'name': l.pen.name, 'colour': l.pen.colour, 'count': l.count()}
+                   for l in drawing.layers if l.count()]
+        emit('proc', state='done',
+             svg=svg,
+             total=drawing.total(),
+             length_mm=round(svg_io.estimate_path_length_mm(drawing)),
+             backend=accel.backend_name(),
+             per_pen=per_pen)
+    except Exception as exc:
+        emit('proc', state='error', msg=str(exc))
+
+@app.route('/api/process', methods=['POST'])
+def api_process():
+    global _process_thread
+    data = request.json or {}
+    pfm_id = data.get('pfm_id') or _project.pfm_id
+    if pfm_id not in REGISTRY:
+        return jsonify(error='Unknown PFM'), 400
+    if _project.image_path is None or not _project.image_path.exists():
+        return jsonify(error='No image loaded'), 400
+    if _process_thread and _process_thread.is_alive():
+        return jsonify(error='Already processing'), 409
+    _area_from(data.get('area'))
+    _drawing_set_from(data.get('drawing_set'))
+    params = data.get('params') or {}
+    seed = int(data.get('seed', params.get('seed', 0)) or 0)
+    _process_thread = threading.Thread(
+        target=_process_worker, args=(pfm_id, params, seed), daemon=True)
+    _process_thread.start()
+    return jsonify(ok=True)
+
+@app.route('/api/area', methods=['GET', 'POST'])
+def api_area():
+    if request.method == 'POST':
+        _area_from(request.json or {})
+        _project.save()
+    return jsonify(area=_project.area.to_dict(), presets=AREA_PRESETS)
+
+@app.route('/api/pens', methods=['GET', 'POST'])
+def api_pens():
+    if request.method == 'POST':
+        _drawing_set_from(request.json or {})
+        _project.save()
+    return jsonify(drawing_set=_project.drawing_set.to_dict(),
+                   libraries=list(PEN_LIBRARIES.keys()))
+
+@app.route('/api/pens/library/<name>')
+def api_pen_library(name):
+    return jsonify(pens=[p.to_dict() for p in library_pens(name)])
+
+@app.route('/api/versions', methods=['GET', 'POST'])
+def api_versions():
+    if request.method == 'POST':
+        if _drawing is None:
+            return jsonify(error='Nothing to save — process a drawing first'), 400
+        data = request.json or {}
+        v = _project.add_version(_drawing, name=data.get('name', ''),
+                                 notes=data.get('notes', ''))
+        return jsonify(ok=True, version=v.to_dict())
+    return jsonify(versions=[v.to_dict() for v in _project.versions])
+
+@app.route('/api/versions/<vid>', methods=['DELETE', 'PATCH'])
+def api_version(vid):
+    v = _project.get_version(vid)
+    if not v:
+        return jsonify(error='Unknown version'), 404
+    if request.method == 'DELETE':
+        _project.delete_version(vid)
+        return jsonify(ok=True)
+    data = request.json or {}
+    if 'rating' in data:
+        v.rating = int(data['rating'])
+    if 'name' in data:
+        v.name = str(data['name'])
+    if 'notes' in data:
+        v.notes = str(data['notes'])
+    _project.save()
+    return jsonify(ok=True, version=v.to_dict())
+
+@app.route('/api/versions/<vid>/load', methods=['POST'])
+def api_version_load(vid):
+    if not _project.load_version(vid):
+        return jsonify(error='Unknown version'), 404
+    p = get_pfm(_project.pfm_id)
+    return jsonify(ok=True, pfm_id=_project.pfm_id,
+                   params=_project.params, schema=schema_json(p.params),
+                   area=_project.area.to_dict(),
+                   drawing_set=_project.drawing_set.to_dict())
+
+@app.route('/api/versions/<vid>/move', methods=['POST'])
+def api_version_move(vid):
+    direction = int((request.json or {}).get('direction', 0))
+    _project.reorder_version(vid, direction)
+    return jsonify(ok=True, versions=[v.to_dict() for v in _project.versions])
+
+@app.route('/api/versions/clear', methods=['POST'])
+def api_versions_clear():
+    _project.clear_versions()
+    return jsonify(ok=True)
+
+@app.route('/api/version-thumb/<vid>')
+def api_version_thumb(vid):
+    v = _project.get_version(vid)
+    if not v:
+        return jsonify(error='Unknown version'), 404
+    return send_file(_project.dir / v.thumbnail)
+
+@app.route('/api/export')
+def api_export():
+    if _drawing is None:
+        return jsonify(error='Nothing to export'), 400
+    if request.args.get('split') == '1':
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            for i, (name, svg) in enumerate(svg_io.to_svg_layers(_drawing)):
+                safe = re.sub(r'[^A-Za-z0-9_-]+', '_', name)
+                z.writestr(f'{i:02d}_{safe}.svg', svg)
+        buf.seek(0)
+        return send_file(buf, mimetype='application/zip', as_attachment=True,
+                         download_name='plot_layers.zip')
+    svg = svg_io.to_svg(_drawing)
+    return send_file(io.BytesIO(svg.encode()), mimetype='image/svg+xml',
+                     as_attachment=True, download_name='plot.svg')
+
+
 if __name__ == '__main__':
-    print('Plotter server running at http://0.0.0.0:5000')
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    host = '100.111.89.104'
+    port = 7438
+    print(f'Plotter server running at http://{host}:{port}')
+    app.run(host=host, port=port, debug=False, threaded=True)

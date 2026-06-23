@@ -1,0 +1,101 @@
+"""GPU/CPU backend abstraction.
+
+Exposes two hot primitives used by every sampler:
+  * ``assign_nearest(points, sites)``  -> nearest-site index per point
+  * ``weighted_centroids(points, weights, labels, n)`` -> per-site centroid + mass
+
+When PyTorch with MPS (Metal) or CUDA is available the nearest-site assignment
+runs on the GPU in tiles; otherwise it falls back to ``scipy.spatial.cKDTree``.
+Results are identical modulo floating-point summation order.
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+try:  # optional GPU dependency
+    import torch
+    _HAS_TORCH = True
+except Exception:  # pragma: no cover - torch optional
+    torch = None  # type: ignore
+    _HAS_TORCH = False
+
+
+def _pick_device():
+    if not _HAS_TORCH:
+        return None
+    try:
+        if torch.backends.mps.is_available():
+            return torch.device("mps")
+    except Exception:
+        pass
+    try:
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+    except Exception:
+        pass
+    return None  # plain torch-CPU isn't worth it over scipy/numpy
+
+
+DEVICE = _pick_device()
+
+
+def backend_name() -> str:
+    if DEVICE is not None:
+        return f"torch-{DEVICE.type}"
+    return "numpy"
+
+
+def using_gpu() -> bool:
+    return DEVICE is not None
+
+
+def _assign_nearest_torch(points: np.ndarray, sites: np.ndarray, tile: int = 1 << 16) -> np.ndarray:
+    pt = torch.as_tensor(points, dtype=torch.float32, device=DEVICE)
+    st = torch.as_tensor(sites, dtype=torch.float32, device=DEVICE)
+    n = pt.shape[0]
+    labels = torch.empty(n, dtype=torch.int64, device=DEVICE)
+    for i in range(0, n, tile):
+        chunk = pt[i:i + tile]                       # (c, 2)
+        d = torch.cdist(chunk, st)                   # (c, M)
+        labels[i:i + tile] = torch.argmin(d, dim=1)
+    return labels.to("cpu").numpy()
+
+
+def assign_nearest(points: np.ndarray, sites: np.ndarray) -> np.ndarray:
+    """Index of the nearest site for each point. points (N,2), sites (M,2)."""
+    points = np.ascontiguousarray(points, dtype=np.float32)
+    sites = np.ascontiguousarray(sites, dtype=np.float32)
+    if sites.shape[0] == 0:
+        return np.zeros(points.shape[0], dtype=np.int64)
+    if DEVICE is not None and points.shape[0] * sites.shape[0] > 1_000_000:
+        try:
+            return _assign_nearest_torch(points, sites)
+        except Exception:
+            pass
+    from scipy.spatial import cKDTree
+    _, idx = cKDTree(sites).query(points, k=1)
+    return np.asarray(idx, dtype=np.int64)
+
+
+def weighted_centroids(
+    points: np.ndarray,
+    weights: np.ndarray,
+    labels: np.ndarray,
+    n_sites: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Density-weighted centroid and total mass per site.
+
+    Returns (centroids (n_sites,2), mass (n_sites,)). Sites with no assigned
+    mass get a zero centroid (caller decides how to respawn them).
+    """
+    labels = np.asarray(labels, dtype=np.int64)
+    w = np.asarray(weights, dtype=np.float64)
+    wx = np.bincount(labels, weights=w * points[:, 0], minlength=n_sites)
+    wy = np.bincount(labels, weights=w * points[:, 1], minlength=n_sites)
+    mass = np.bincount(labels, weights=w, minlength=n_sites)
+    cent = np.zeros((n_sites, 2), dtype=np.float64)
+    nz = mass > 1e-12
+    cent[nz, 0] = wx[nz] / mass[nz]
+    cent[nz, 1] = wy[nz] / mass[nz]
+    return cent, mass
