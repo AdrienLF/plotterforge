@@ -39,6 +39,9 @@ class Studio {
   // versions
   versions = $state<VersionT[]>([]);
 
+  // active workspace step
+  step = $state<"pathfinding" | "generate" | "plot">("pathfinding");
+
   // plotter / machine
   settings = $state<Record<string, any> | null>(null);
   machineStatus = $state("");

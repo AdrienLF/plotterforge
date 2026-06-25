@@ -155,7 +155,7 @@
     void api.savePlacement(true);
   }
 
-  function align(mode: AlignMode) {
+  export function align(mode: AlignMode) {
     const aligned = alignPlacement(mode, studio.placement, drawingSize, page);
     studio.placement = { x: round1(aligned.x), y: round1(aligned.y) };
     void api.savePlacement(true);
@@ -233,17 +233,6 @@
 
   {#if studio.processing}
     <div class="busy">Processing… {Math.round(studio.progress * 100)}%</div>
-  {/if}
-  {#if studio.previewSvg}
-    <div class="placement-tools" onpointerdown={(e) => e.stopPropagation()} role="toolbar" tabindex="-1" aria-label="Placement alignment">
-      <button title="Align left" onclick={() => align("left")}>⬅</button>
-      <button title="Align horizontal center" onclick={() => align("center_h")}>↔</button>
-      <button title="Align right" onclick={() => align("right")}>➡</button>
-      <button title="Align top" onclick={() => align("top")}>⬆</button>
-      <button title="Align vertical center" onclick={() => align("center_v")}>↕</button>
-      <button title="Align bottom" onclick={() => align("bottom")}>⬇</button>
-      <span>x {studio.placement.x.toFixed(1)} · y {studio.placement.y.toFixed(1)} mm</span>
-    </div>
   {/if}
 </div>
 
@@ -373,33 +362,5 @@
     padding: 5px 10px;
     border-radius: 4px;
     font-size: 12px;
-  }
-  .placement-tools {
-    align-items: center;
-    background: rgba(22, 24, 28, 0.88);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    display: flex;
-    gap: 4px;
-    left: 12px;
-    padding: 5px;
-    position: absolute;
-    top: 12px;
-    z-index: 10;
-  }
-  .placement-tools button {
-    align-items: center;
-    display: flex;
-    height: 28px;
-    justify-content: center;
-    padding: 0;
-    width: 28px;
-  }
-  .placement-tools span {
-    color: var(--text-dim);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    margin-left: 5px;
-    min-width: 104px;
   }
 </style>

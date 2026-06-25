@@ -64,14 +64,18 @@ label { color: var(--text-dim); }
 .app-grid {
   display: grid;
   grid-template-columns: 48px 1fr 320px;
-  grid-template-rows: 30px 1fr 26px;
+  grid-template-rows: 30px 32px 38px 1fr 26px;
   grid-template-areas:
     "menu menu menu"
+    "tabs tabs tabs"
+    "toolbar toolbar toolbar"
     "rail viewport dock"
     "status status status";
   height: 100%;
 }
 .area-menu { grid-area: menu; }
+.area-tabs { grid-area: tabs; }
+.area-toolbar { grid-area: toolbar; }
 .area-rail { grid-area: rail; }
 .area-viewport { grid-area: viewport; }
 .area-dock { grid-area: dock; }
