@@ -16,6 +16,21 @@
   async function onSelect(e: Event) {
     await api.selectGenerator((e.target as HTMLSelectElement).value);
   }
+
+  // Auto-redraw: regenerate (debounced) on entering the step and whenever a
+  // parameter changes. The panel only mounts on the Generate step, so the
+  // initial run gives an immediate first draw.
+  let timer: ReturnType<typeof setTimeout>;
+  $effect(() => {
+    JSON.stringify(studio.genParams); // track every parameter
+    studio.generatorId;
+    studio.autoRedraw;
+    clearTimeout(timer);
+    if (!studio.autoRedraw) return;
+    timer = setTimeout(() => {
+      if (!studio.processing) void api.generate();
+    }, 350);
+  });
 </script>
 
 <div class="col">
@@ -25,9 +40,15 @@
     {/each}
   </select>
 
-  <button class="primary gen" disabled={studio.processing} onclick={() => api.generate()}>
-    {studio.processing ? "Generating…" : "✦ Generate"}
-  </button>
+  <div class="row">
+    <button class="primary gen" disabled={studio.processing} onclick={() => api.generate()}>
+      {studio.processing ? "Generating…" : "✦ Generate"}
+    </button>
+    <label class="auto" title="Redraw automatically when a parameter changes">
+      <input type="checkbox" bind:checked={studio.autoRedraw} />
+      <span>Auto</span>
+    </label>
+  </div>
 
   {#each groups as [group, params] (group)}
     <div class="group">
@@ -44,8 +65,19 @@
     width: 100%;
   }
   .gen {
-    width: 100%;
+    flex: 1;
     padding: 6px;
+  }
+  .auto {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .auto input {
+    width: auto;
   }
   .group {
     border-top: 1px solid var(--line);

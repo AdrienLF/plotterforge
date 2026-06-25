@@ -14,6 +14,7 @@ from engine.pens import DrawingSet, PEN_LIBRARIES, library_pens
 from engine.params import schema_json, validate
 from engine.pfm import REGISTRY, get as get_pfm, list_pfms
 from engine.generate import GENERATORS, get_generator, list_generators
+from engine.genframe import apply_framework
 from engine.project import get_or_create
 
 app = Flask(__name__)
@@ -969,6 +970,20 @@ def _plot_worker(job):
 
 SPA_DIR = Path(app.static_folder) / 'app'
 
+_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+    '<rect width="32" height="32" rx="7" fill="#1a1a1c"/>'
+    '<circle cx="16" cy="16" r="9" fill="none" stroke="#2e8bff" stroke-width="2"/>'
+    '<circle cx="16" cy="16" r="2.4" fill="#2e8bff"/>'
+    '<path d="M16 3v5M16 24v5M3 16h5M24 16h5" stroke="#2e8bff" stroke-width="2" stroke-linecap="round"/>'
+    '</svg>'
+)
+
+@app.route('/favicon.ico')
+def favicon():
+    return Response(_FAVICON, mimetype='image/svg+xml',
+                   headers={'Cache-Control': 'max-age=86400'})
+
 @app.route('/')
 def index():
     spa = SPA_DIR / 'index.html'
@@ -1275,7 +1290,12 @@ def _generate_worker(gid, params, seed):
         gen = get_generator(gid)
         vals = validate(gen['params'], params)
         emit('proc', state='progress', stage='generating', frac=0.3)
-        lines, w_mm, h_mm = gen['fn'](vals, seed=seed)
+        lines, w_cm, h_cm = gen['fn'](vals, seed=seed)          # cm
+        emit('proc', state='progress', stage='transforming', frac=0.6)
+        lines, extras = apply_framework(lines, w_cm, h_cm, vals, seed)
+        lines = lines + extras
+        lines = [[(x * 10.0, y * 10.0) for x, y in ln] for ln in lines]  # cm -> mm
+        w_mm, h_mm = w_cm * 10.0, h_cm * 10.0
         pen = _project.drawing_set.active()[0]
         svg = svg_io.lines_to_svg(lines, w_mm, h_mm, colour=pen.colour, stroke_mm=pen.stroke_mm)
         _drawing = None                       # generators output flat polylines, not a Drawing

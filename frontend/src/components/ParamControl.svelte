@@ -9,35 +9,40 @@
 </script>
 
 <div class="ctrl">
-  <label for={param.name} title={param.help}>{param.label}</label>
   {#if param.type === "bool"}
-    <input id={param.name} type="checkbox" bind:checked={value} />
-  {:else if param.type === "enum"}
-    <select id={param.name} bind:value>
-      {#each param.choices ?? [] as opt}
-        <option value={opt}>{opt}</option>
-      {/each}
-    </select>
-  {:else if isNumeric}
-    <div class="num">
-      {#if param.min !== null && param.max !== null}
+    <label class="bool" title={param.help}>
+      <input type="checkbox" bind:checked={value} />
+      <span>{param.label}</span>
+    </label>
+  {:else}
+    <label for={param.name} title={param.help}>{param.label}</label>
+    {#if param.type === "enum"}
+      <select id={param.name} bind:value>
+        {#each param.choices ?? [] as opt}
+          <option value={opt}>{opt}</option>
+        {/each}
+      </select>
+    {:else if isNumeric}
+      <div class="num">
+        {#if param.min !== null && param.max !== null}
+          <input
+            type="range"
+            min={param.min}
+            max={param.max}
+            step={param.step ?? (param.type === "int" ? 1 : 0.01)}
+            bind:value
+          />
+        {/if}
         <input
-          type="range"
-          min={param.min}
-          max={param.max}
+          class="numbox"
+          type="number"
+          min={param.min ?? undefined}
+          max={param.max ?? undefined}
           step={param.step ?? (param.type === "int" ? 1 : 0.01)}
           bind:value
         />
-      {/if}
-      <input
-        class="numbox"
-        type="number"
-        min={param.min ?? undefined}
-        max={param.max ?? undefined}
-        step={param.step ?? (param.type === "int" ? 1 : 0.01)}
-        bind:value
-      />
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -50,6 +55,20 @@
   }
   label {
     font-size: 11px;
+  }
+  .bool {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+  }
+  .bool input {
+    width: auto;
+    margin: 0;
+    flex: none;
+  }
+  .bool span {
+    color: var(--text);
   }
   .num {
     display: grid;

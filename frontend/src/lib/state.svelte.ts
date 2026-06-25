@@ -33,6 +33,7 @@ class Studio {
   generatorId = $state("spokes_and_circles");
   genSchema = $state<Param[]>([]);
   genParams = $state<Record<string, any>>({});
+  autoRedraw = $state(true);
 
   // drawing area
   area = $state<AreaT | null>(null);

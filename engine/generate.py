@@ -13,6 +13,7 @@ import math
 import random
 
 from .geometry import clip_polyline
+from .genframe import FRAMEWORK_PARAMS
 from .params import Param
 
 Line = list[tuple[float, float]]
@@ -142,12 +143,10 @@ def spokes_and_circles(p: dict, seed: int = 0):
 
     pattern.extend(ray_lines)
 
-    if p["draw_margin"]:
-        x0, y0, x1, y1 = rect
-        pattern.append([(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)])
-
-    lines_mm = [[(x * 10.0, y * 10.0) for x, y in line] for line in pattern if len(line) >= 2]
-    return lines_mm, pw * 10.0, ph * 10.0
+    # Output in cm; the framework pipeline + worker handle margins, cropping,
+    # transforms and the final cm -> mm conversion.
+    lines = [line for line in pattern if len(line) >= 2]
+    return lines, pw, ph
 
 
 # ── registry ────────────────────────────────────────────────────────────────────
@@ -185,7 +184,7 @@ GENERATORS = {
     "spokes_and_circles": {
         "id": "spokes_and_circles",
         "name": "Spokes & Circles",
-        "params": _SPOKES_PARAMS + _PAGE_PARAMS,
+        "params": _SPOKES_PARAMS + _PAGE_PARAMS + FRAMEWORK_PARAMS,
         "fn": spokes_and_circles,
     },
 }
