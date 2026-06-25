@@ -186,7 +186,6 @@ export const api = {
     const r = await fetch("/api/upload", { method: "POST", body: fd });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "SVG upload failed");
-    studio.previewSvg = j.svg;
     this.applyComposition(j);
     studio.imageUrl = null;
     studio.imageName = j.name;
@@ -197,7 +196,6 @@ export const api = {
     studio.stats = null;
     studio.plotProgress = null;
     pushLog(`Loaded SVG ${j.name}`);
-    await this.refreshEstimate(true);
   },
 
   async saveArea() {

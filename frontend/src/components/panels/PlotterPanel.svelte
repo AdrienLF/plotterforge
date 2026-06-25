@@ -137,7 +137,7 @@
     </div>
 
     <div class="actions">
-      <button class="primary" onclick={startPlot} disabled={busy !== "" || !studio.previewSvg}>
+      <button class="primary" onclick={startPlot} disabled={busy !== "" || !studio.hasVisibleLayers}>
         Start
       </button>
       <button onclick={resumePlot} disabled={busy !== "" || studio.plotting || !studio.plotJob?.resumable}>
@@ -146,7 +146,7 @@
       <button class="danger" onclick={stopPlot} disabled={busy !== "" || !studio.plotting}>
         Stop
       </button>
-      <button onclick={refreshEstimate} disabled={busy !== "" || !studio.previewSvg}>Refresh</button>
+      <button onclick={refreshEstimate} disabled={busy !== "" || !studio.hasVisibleLayers}>Refresh</button>
     </div>
 
     {#if studio.plotterTab === "estimate"}

@@ -191,7 +191,7 @@ class CompositionApiTest(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(len(payload["composition"]["layers"]), 1)
         self.assertEqual(payload["composition"]["layers"][0]["width"], 210.0)
-        self.assertIn('width="297mm"', payload["svg"])
+        self.assertNotIn("svg", payload)
 
     def test_layer_visibility_controls_export(self):
         a = server._project.composition.add_layer(LAYER_A, "A", "svg", {})

@@ -1042,7 +1042,6 @@ def upload():
         {'filename': f.filename},
     )
     return jsonify(
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
         name=f.filename,
         composition=_composition_payload(),
     )
@@ -1151,7 +1150,6 @@ def api_composition():
     _sync_current_svg_from_composition()
     return jsonify(
         composition=_composition_payload(),
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/composition/layers/<layer_id>', methods=['PATCH'])
@@ -1175,7 +1173,6 @@ def api_composition_layer(layer_id):
     return jsonify(
         ok=True,
         composition=_composition_payload(),
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/composition/layers/<layer_id>/duplicate', methods=['POST'])
@@ -1188,7 +1185,6 @@ def api_duplicate_layer(layer_id):
     return jsonify(
         ok=True,
         composition=_composition_payload(),
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/composition/layers/<layer_id>', methods=['DELETE'])
@@ -1200,7 +1196,6 @@ def api_delete_layer(layer_id):
     return jsonify(
         ok=True,
         composition=_composition_payload(),
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/composition/layers/<layer_id>/move', methods=['POST'])
@@ -1213,7 +1208,6 @@ def api_move_layer(layer_id):
     return jsonify(
         ok=True,
         composition=_composition_payload(),
-        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/settings', methods=['GET', 'POST'])

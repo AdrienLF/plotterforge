@@ -16,8 +16,8 @@
     <summary>File</summary>
     <div class="items">
       <button onclick={onImport}>Import image…</button>
-      <button disabled={!studio.stats} onclick={() => exportSvg(false)}>Export SVG</button>
-      <button disabled={!studio.stats} onclick={() => exportSvg(true)}>Export layers (zip)</button>
+      <button disabled={!studio.hasVisibleLayers} onclick={() => exportSvg(false)}>Export SVG</button>
+      <button disabled={!studio.hasVisibleLayers} onclick={() => exportSvg(true)}>Export layers (zip)</button>
     </div>
   </details>
 
@@ -25,7 +25,7 @@
     <summary>Drawing</summary>
     <div class="items">
       <button disabled={!studio.imageUrl} onclick={() => api.process()}>Run path finding</button>
-      <button disabled={!studio.previewSvg} onclick={onPlot}>Plot…</button>
+      <button disabled={!studio.hasVisibleLayers} onclick={onPlot}>Plot…</button>
     </div>
   </details>
 

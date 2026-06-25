@@ -27,7 +27,7 @@
   <button
     class="icon"
     title="Plot"
-    disabled={studio.plotting || !studio.previewSvg}
+    disabled={studio.plotting || !studio.hasVisibleLayers}
     onclick={onPlot}>🖊</button
   >
   <button class="icon stop" title="Stop" disabled={!studio.plotting} onclick={() => api.stop()}>■</button>

@@ -84,6 +84,7 @@ class Studio {
       this.composition.layers.at(-1) ??
       null,
   );
+  hasVisibleLayers = $derived(this.composition.layers.some((layer) => layer.visible));
 }
 
 export const studio = new Studio();

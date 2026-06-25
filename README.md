@@ -13,9 +13,9 @@ driver). It offers a library of configurable **Path Finding Modules**, a
 Control** — with optional GPU acceleration.
 
 ```sh
-uv sync                       # engine + web deps (add --extra gpu for Torch/MPS)
+uv sync --extra gpu           # engine + web deps with Torch/MPS/CUDA
 cd frontend && npm install && npm run build   # builds the SPA into web/static/app
-cd .. && uv run python -m web.server          # serves UI + API on the Tailscale host
+cd .. && uv run --extra gpu python -m web.server  # serves UI + API; CPU fallback stays available
 ```
 
 For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
@@ -25,9 +25,10 @@ For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
   Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus the
   ported Grid Halftone and Random Stipple. Every module's settings are
   auto-generated from a typed schema (`engine/params.py`).
-- **GPU:** `engine/accel.py` uses Torch (Metal/MPS or CUDA) for the heavy
-  nearest-site / weighted-centroid stages when available, falling back to
-  numpy/scipy otherwise. The status bar shows the active backend.
+- **GPU-first:** launch commands use the `gpu` extra by default. `engine/accel.py`
+  uses Torch (Metal/MPS or CUDA) for the heavy nearest-site / weighted-centroid
+  stages when available, falling back to numpy/scipy only when GPU support is not
+  available. The status bar shows the active backend.
 - **Integration:** a module produces a `Drawing` → `engine/svg_io.py` writes a
   multi-layer mm SVG → the existing `_plot_worker` in `web/server.py` plots it,
   unchanged. Projects/versions are stored under `~/.plotter_studio/`.
@@ -42,7 +43,7 @@ For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
 ```sh
 git clone <repo>
 cd raster-to-plotter-svg
-uv sync
+uv sync --extra gpu
 ```
 
 ## Usage
