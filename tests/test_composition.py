@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from engine.composition import (
     parse_svg_size_mm,
     replace_selected_layer,
 )
+import web.server as server
 
 
 LAYER_A = """<svg xmlns="http://www.w3.org/2000/svg" width="210mm" height="297mm" viewBox="0 0 210 297">
@@ -127,3 +129,70 @@ class CompositionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CompositionApiTest(unittest.TestCase):
+    def setUp(self):
+        self.old_project = server._project
+        self.old_svg = server._current_svg
+        self.old_placement = server._placement
+
+        class TempProject:
+            def __init__(self):
+                self.composition = Composition()
+                self.drawing_set = server.DrawingSet()
+                self.area = server.DrawingArea()
+                self.pfm_id = "voronoi_stippling"
+                self.params = {}
+
+            def save_composition_layers(self):
+                pass
+
+            def save(self):
+                pass
+
+        server._project = TempProject()
+        server._current_svg = None
+        server._placement = {"x": 0.0, "y": 0.0}
+        self.client = server.app.test_client()
+
+    def tearDown(self):
+        server._project = self.old_project
+        server._current_svg = self.old_svg
+        server._placement = self.old_placement
+
+    def test_upload_svg_creates_composition_layer(self):
+        response = self.client.post(
+            "/api/upload",
+            data={"file": (io.BytesIO(LAYER_A.encode()), "art.svg")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(len(payload["composition"]["layers"]), 1)
+        self.assertEqual(payload["composition"]["layers"][0]["width"], 210.0)
+        self.assertIn('width="297mm"', payload["svg"])
+
+    def test_layer_visibility_controls_export(self):
+        a = server._project.composition.add_layer(LAYER_A, "A", "svg", {})
+        b = server._project.composition.add_layer(LAYER_B, "B", "svg", {})
+        b.visible = False
+
+        response = self.client.get("/api/export")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn(a.id, body)
+        self.assertNotIn(b.id, body)
+
+    def test_split_export_uses_layer_bounds(self):
+        server._project.composition.add_layer(LAYER_A, "A4 Layer", "svg", {})
+
+        response = self.client.get("/api/export?split=1")
+
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(response.data)) as zf:
+            layer_svg = zf.read("00_A4_Layer.svg").decode()
+        self.assertIn('width="210mm"', layer_svg)
+        self.assertNotIn('width="297mm"', layer_svg)

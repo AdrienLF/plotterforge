@@ -15,6 +15,7 @@ from engine.params import schema_json, validate
 from engine.pfm import REGISTRY, get as get_pfm, list_pfms
 from engine.generate import GENERATORS, get_generator, list_generators
 from engine.genframe import apply_framework
+from engine.composition import compose_visible_svg, layer_svg_zip, replace_selected_layer
 from engine.project import get_or_create
 
 app = Flask(__name__)
@@ -79,6 +80,40 @@ _project        = get_or_create('default')
 _drawing        = None    # last engine.Drawing produced
 _process_thread = None
 _process_lock   = threading.Lock()
+
+def _composition():
+    return _project.composition
+
+def _composition_has_visible_layers():
+    return any(layer.visible for layer in _composition().layers)
+
+def _composed_svg_bytes():
+    if not _composition_has_visible_layers():
+        return None
+    return compose_visible_svg(_composition()).encode()
+
+def _sync_current_svg_from_composition():
+    global _current_svg, _placement
+    composed = _composed_svg_bytes()
+    if composed is not None:
+        _current_svg = composed
+        _placement = {'x': 0.0, 'y': 0.0}
+    return composed
+
+def _replace_selected_composition_layer(svg, name, kind, source):
+    layer = replace_selected_layer(
+        _composition(),
+        svg,
+        name=name,
+        kind=kind,
+        source=source,
+    )
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return layer
+
+def _composition_payload():
+    return _composition().to_dict(include_svg=True)
 
 def emit(t, **kw):
     evt = {'t': t, **kw}
@@ -994,15 +1029,23 @@ def index():
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
-    global _current_svg, _placement
     f = request.files.get('file')
     if not f:
         return jsonify(error='No file'), 400
     if not f.filename.lower().endswith('.svg'):
         return jsonify(error='SVG files only'), 400
-    _current_svg = f.read()
-    _placement = {'x': 0.0, 'y': 0.0}
-    return jsonify(svg=_current_svg.decode('utf-8', 'replace'), name=f.filename)
+    svg = f.read().decode('utf-8', 'replace')
+    _replace_selected_composition_layer(
+        svg,
+        f.filename,
+        'svg',
+        {'filename': f.filename},
+    )
+    return jsonify(
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
+        name=f.filename,
+        composition=_composition_payload(),
+    )
 
 @app.route('/api/placement', methods=['POST'])
 def placement_route():
@@ -1016,11 +1059,12 @@ def placement_route():
 
 @app.route('/api/plot/estimate')
 def plot_estimate():
+    _sync_current_svg_from_composition()
     if _current_svg is None:
         return jsonify(error='No SVG loaded'), 400
     try:
         settings = cfg.copy()
-        polylines = _placed_polylines(_current_svg, settings)
+        polylines = _placed_polylines(_current_svg, settings, placement={'x': 0.0, 'y': 0.0})
         if not polylines:
             return jsonify(error='No paths found in SVG.'), 400
         return jsonify(ok=True, **_estimate_polylines(polylines, settings))
@@ -1034,6 +1078,7 @@ def plot_job_route():
 @app.route('/api/plot', methods=['POST'])
 def plot():
     global _plot_thread, _stop_event
+    _sync_current_svg_from_composition()
     if _current_svg is None:
         return jsonify(error='No SVG loaded'), 400
     if _plot_thread and _plot_thread.is_alive():
@@ -1041,7 +1086,7 @@ def plot():
     _clear_events()
     _clear_last_plot_events()
     _stop_event.clear()
-    job = _create_plot_job(_current_svg, cfg.copy(), _placement.copy())
+    job = _create_plot_job(_current_svg, cfg.copy(), {'x': 0.0, 'y': 0.0})
     _plot_thread = threading.Thread(
         target=_plot_worker, args=(job,), daemon=True
     )
@@ -1099,6 +1144,38 @@ def stream():
         stream_with_context(generate()),
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+@app.route('/api/composition')
+def api_composition():
+    _sync_current_svg_from_composition()
+    return jsonify(
+        composition=_composition_payload(),
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
+    )
+
+@app.route('/api/composition/layers/<layer_id>', methods=['PATCH'])
+def api_composition_layer(layer_id):
+    data = request.json or {}
+    layer = next((l for l in _composition().layers if l.id == layer_id), None)
+    if not layer:
+        return jsonify(error='Unknown layer'), 404
+    if 'name' in data:
+        layer.name = str(data['name'])
+    if 'visible' in data:
+        layer.visible = bool(data['visible'])
+    if 'x' in data:
+        layer.x = float(data['x'])
+    if 'y' in data:
+        layer.y = float(data['y'])
+    if data.get('selected'):
+        _composition().selected_layer_id = layer.id
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return jsonify(
+        ok=True,
+        composition=_composition_payload(),
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
 @app.route('/api/settings', methods=['GET', 'POST'])
@@ -1245,14 +1322,25 @@ def _process_worker(pfm_id, params, seed):
                           params, seed=seed, on_progress=on_progress)
         svg = svg_io.to_svg(drawing)
         _drawing = drawing
-        _current_svg = svg.encode()           # so /api/plot can plot it directly
         _project.pfm_id = pfm_id
         _project.params = validate(pfm.params, params)
+        _replace_selected_composition_layer(
+            svg,
+            p.name,
+            'pathfinding',
+            {
+                'pfm_id': pfm_id,
+                'params': _project.params,
+                'area': _project.area.to_dict(),
+                'drawing_set': _project.drawing_set.to_dict(),
+            },
+        )
         _project.save()
         per_pen = [{'name': l.pen.name, 'colour': l.pen.colour, 'count': l.count()}
                    for l in drawing.layers if l.count()]
         emit('proc', state='done',
-             svg=svg,
+             svg=_current_svg.decode('utf-8', 'replace') if _current_svg else svg,
+             composition=_composition_payload(),
              total=drawing.total(),
              length_mm=round(svg_io.estimate_path_length_mm(drawing)),
              backend=accel.backend_name(),
@@ -1299,9 +1387,16 @@ def _generate_worker(gid, params, seed):
         pen = _project.drawing_set.active()[0]
         svg = svg_io.lines_to_svg(lines, w_mm, h_mm, colour=pen.colour, stroke_mm=pen.stroke_mm)
         _drawing = None                       # generators output flat polylines, not a Drawing
-        _current_svg = svg.encode()           # so /api/plot and /api/export work
+        _replace_selected_composition_layer(
+            svg,
+            gen['name'],
+            'generate',
+            {'generator_id': gid, 'params': vals},
+        )
         emit('proc', state='done',
-             svg=svg, total=len(lines),
+             svg=_current_svg.decode('utf-8', 'replace') if _current_svg else svg,
+             composition=_composition_payload(),
+             total=len(lines),
              length_mm=round(svg_io.lines_length_mm(lines)),
              backend='generator',
              per_pen=[{'name': pen.name, 'colour': pen.colour, 'count': len(lines)}])
@@ -1414,6 +1509,15 @@ def api_version_thumb(vid):
 
 @app.route('/api/export')
 def api_export():
+    if _composition_has_visible_layers():
+        if request.args.get('split') == '1':
+            return send_file(io.BytesIO(layer_svg_zip(_composition())),
+                             mimetype='application/zip',
+                             as_attachment=True,
+                             download_name='plot_layers.zip')
+        svg = compose_visible_svg(_composition())
+        return send_file(io.BytesIO(svg.encode()), mimetype='image/svg+xml',
+                         as_attachment=True, download_name='plot.svg')
     if _drawing is None:
         # generator output (or uploaded SVG): export the current SVG as-is
         if _current_svg is not None:
