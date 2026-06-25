@@ -62,6 +62,26 @@ export interface VersionT {
   thumbnail: string;
 }
 
+export interface CompositionLayerT {
+  id: string;
+  name: string;
+  kind: "generate" | "pathfinding" | "svg";
+  visible: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  svg: string;
+  svg_path?: string;
+  source: Record<string, any>;
+}
+
+export interface CompositionT {
+  page: { width: number; height: number; units: "mm" };
+  selected_layer_id: string | null;
+  layers: CompositionLayerT[];
+}
+
 export interface Stats {
   total: number;
   length_mm: number;

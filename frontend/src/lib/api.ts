@@ -46,15 +46,28 @@ function normalizeReordering(value: any) {
   return aliases[key] ?? "nearest";
 }
 
+let genPending = false;
+let genTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushGenerate() {
+  if (genTimer) clearTimeout(genTimer);
+  genTimer = setTimeout(() => {
+    if (!genPending || studio.processing) return;
+    genPending = false;
+    void api.generate();
+  }, 0);
+}
+
 export const api = {
   async boot() {
-    const [list, gens, area, pens, settings, plotJob] = await Promise.all([
+    const [list, gens, area, pens, settings, plotJob, composition] = await Promise.all([
       jget("/api/pfm/list"),
       jget("/api/generate/list"),
       jget("/api/area"),
       jget("/api/pens"),
       jget("/api/settings"),
       jget("/api/plot/job"),
+      jget("/api/composition"),
     ]);
     studio.pfms = list.pfms;
     studio.backend = list.backend;
@@ -65,9 +78,51 @@ export const api = {
     studio.libraries = pens.libraries;
     studio.settings = { ...settings, reordering: normalizeReordering(settings.reordering) };
     studio.plotJob = plotJob;
+    this.applyComposition(composition);
     await this.selectPfm(studio.pfmId);
     await this.selectGenerator(studio.generatorId);
     await this.refreshVersions();
+  },
+
+  applyComposition(payload: any) {
+    if (payload?.composition) studio.composition = payload.composition;
+    if (payload && "svg" in payload) studio.previewSvg = payload.svg;
+  },
+
+  async refreshComposition() {
+    const j = await jget("/api/composition");
+    this.applyComposition(j);
+    return j;
+  },
+
+  async patchLayer(id: string, data: Record<string, any>) {
+    const j = await jpost(`/api/composition/layers/${id}`, data, "PATCH");
+    this.applyComposition(j);
+    await this.refreshEstimate(true);
+    return j;
+  },
+
+  async selectLayer(id: string) {
+    if (!id) return;
+    await this.patchLayer(id, { selected: true });
+  },
+
+  async duplicateLayer(id: string) {
+    const j = await jpost(`/api/composition/layers/${id}/duplicate`);
+    this.applyComposition(j);
+    await this.refreshEstimate(true);
+  },
+
+  async deleteLayer(id: string) {
+    const j = await jpost(`/api/composition/layers/${id}`, undefined, "DELETE");
+    this.applyComposition(j);
+    await this.refreshEstimate(true);
+  },
+
+  async moveLayer(id: string, direction: number) {
+    const j = await jpost(`/api/composition/layers/${id}/move`, { direction });
+    this.applyComposition(j);
+    await this.refreshEstimate(true);
   },
 
   async selectGenerator(id: string) {
@@ -83,7 +138,6 @@ export const api = {
     studio.processing = true;
     studio.status = "Generating";
     studio.progress = 0;
-    await this.savePens();
     await jpost("/api/generate", {
       generator_id: studio.generatorId,
       params: studio.genParams,
@@ -91,7 +145,15 @@ export const api = {
       studio.processing = false;
       studio.status = "Error";
       pushLog("Generate error: " + e.message);
+      flushGenerate();
     });
+  },
+
+  // Coalescing redraw: at most one generate in flight; the latest params are
+  // always rendered next. Gives near-real-time feedback while dragging sliders.
+  requestGenerate() {
+    genPending = true;
+    flushGenerate();
   },
 
   async selectPfm(id: string) {
@@ -125,6 +187,7 @@ export const api = {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "SVG upload failed");
     studio.previewSvg = j.svg;
+    this.applyComposition(j);
     studio.imageUrl = null;
     studio.imageName = j.name;
     studio.processing = false;
@@ -274,6 +337,14 @@ export const api = {
   },
 
   async savePlacement(silent = true) {
+    const layer = studio.selectedLayer;
+    if (layer) {
+      await this.patchLayer(layer.id, { x: layer.x, y: layer.y });
+      if (!silent) {
+        pushLog(`Layer saved · x ${layer.x.toFixed(1)} · y ${layer.y.toFixed(1)} mm`);
+      }
+      return;
+    }
     await jpost("/api/placement", studio.placement);
     await this.refreshEstimate(true);
     if (!silent) {
@@ -359,6 +430,11 @@ function handleProc(m: any) {
     studio.progress = 1;
     studio.status = "Ready";
     studio.previewSvg = m.svg;
+    if (m.composition) {
+      studio.composition = m.composition;
+    } else {
+      void api.refreshComposition();
+    }
     studio.stats = {
       total: m.total,
       length_mm: m.length_mm,

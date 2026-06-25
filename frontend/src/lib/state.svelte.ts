@@ -1,5 +1,7 @@
 import type {
   AreaT,
+  CompositionLayerT,
+  CompositionT,
   DrawingSetT,
   Param,
   PlacementMm,
@@ -39,6 +41,13 @@ class Studio {
   area = $state<AreaT | null>(null);
   presets = $state<Record<string, [number, number]>>({});
 
+  // composition
+  composition = $state<CompositionT>({
+    page: { width: 297, height: 420, units: "mm" },
+    selected_layer_id: null,
+    layers: [],
+  });
+
   // pens
   drawingSet = $state<DrawingSetT | null>(null);
   libraries = $state<string[]>([]);
@@ -47,7 +56,7 @@ class Studio {
   versions = $state<VersionT[]>([]);
 
   // active workspace step
-  step = $state<"pathfinding" | "generate" | "plot">("pathfinding");
+  step = $state<"pathfinding" | "generate" | "composition" | "plot">("pathfinding");
 
   // plotter / machine
   settings = $state<Record<string, any> | null>(null);
@@ -69,6 +78,11 @@ class Studio {
 
   pfmName = $derived(
     this.pfms.find((p) => p.id === this.pfmId)?.name ?? this.pfmId,
+  );
+  selectedLayer = $derived<CompositionLayerT | null>(
+    this.composition.layers.find((layer) => layer.id === this.composition.selected_layer_id) ??
+      this.composition.layers.at(-1) ??
+      null,
   );
 }
 

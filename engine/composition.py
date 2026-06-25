@@ -155,6 +155,43 @@ class Composition:
         self.selected_layer_id = layer.id
         return layer
 
+    def delete_layer(self, layer_id: str) -> bool:
+        before = len(self.layers)
+        self.layers = [layer for layer in self.layers if layer.id != layer_id]
+        if len(self.layers) == before:
+            return False
+        if self.selected_layer_id == layer_id:
+            self.selected_layer_id = self.layers[-1].id if self.layers else None
+        return True
+
+    def duplicate_layer(self, layer_id: str) -> CompositionLayer | None:
+        layer = next((item for item in self.layers if item.id == layer_id), None)
+        if layer is None:
+            return None
+        copy = CompositionLayer.from_dict(
+            {
+                **layer.to_dict(include_svg=True),
+                "id": uuid.uuid4().hex[:10],
+                "name": f"{layer.name} copy",
+                "svg_path": "",
+            }
+        )
+        index = self.layers.index(layer) + 1
+        self.layers.insert(index, copy)
+        self.selected_layer_id = copy.id
+        return copy
+
+    def move_layer(self, layer_id: str, direction: int) -> bool:
+        ids = [layer.id for layer in self.layers]
+        if layer_id not in ids:
+            return False
+        index = ids.index(layer_id)
+        target = index + direction
+        if target < 0 or target >= len(self.layers):
+            return False
+        self.layers[index], self.layers[target] = self.layers[target], self.layers[index]
+        return True
+
     def to_dict(self, include_svg: bool = False) -> dict:
         return {
             "page": self.page,

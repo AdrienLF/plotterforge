@@ -126,6 +126,25 @@ class CompositionTest(unittest.TestCase):
         self.assertEqual(manifest["layers"][0]["x"], 10)
         self.assertEqual(manifest["layers"][0]["y"], 20)
 
+    def test_layer_actions_reorder_duplicate_and_delete(self):
+        comp = Composition()
+        a = comp.add_layer(LAYER_A, "A", "svg", {})
+        b = comp.add_layer(LAYER_B, "B", "svg", {})
+
+        self.assertTrue(comp.move_layer(b.id, -1))
+        self.assertEqual([layer.id for layer in comp.layers], [b.id, a.id])
+
+        copy = comp.duplicate_layer(b.id)
+
+        self.assertIsNotNone(copy)
+        self.assertEqual(copy.name, "B copy")
+        self.assertNotEqual(copy.id, b.id)
+        self.assertEqual(comp.selected_layer_id, copy.id)
+
+        self.assertTrue(comp.delete_layer(b.id))
+        self.assertNotIn(b.id, [layer.id for layer in comp.layers])
+        self.assertEqual(comp.selected_layer_id, copy.id)
+
 
 if __name__ == "__main__":
     unittest.main()

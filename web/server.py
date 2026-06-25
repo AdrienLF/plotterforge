@@ -1178,6 +1178,44 @@ def api_composition_layer(layer_id):
         svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
     )
 
+@app.route('/api/composition/layers/<layer_id>/duplicate', methods=['POST'])
+def api_duplicate_layer(layer_id):
+    layer = _composition().duplicate_layer(layer_id)
+    if not layer:
+        return jsonify(error='Unknown layer'), 404
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return jsonify(
+        ok=True,
+        composition=_composition_payload(),
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
+    )
+
+@app.route('/api/composition/layers/<layer_id>', methods=['DELETE'])
+def api_delete_layer(layer_id):
+    if not _composition().delete_layer(layer_id):
+        return jsonify(error='Unknown layer'), 404
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return jsonify(
+        ok=True,
+        composition=_composition_payload(),
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
+    )
+
+@app.route('/api/composition/layers/<layer_id>/move', methods=['POST'])
+def api_move_layer(layer_id):
+    direction = int((request.json or {}).get('direction', 0))
+    if not _composition().move_layer(layer_id, direction):
+        return jsonify(error='Cannot move layer'), 400
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return jsonify(
+        ok=True,
+        composition=_composition_payload(),
+        svg=_current_svg.decode('utf-8', 'replace') if _current_svg else None,
+    )
+
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings_route():
     global cfg

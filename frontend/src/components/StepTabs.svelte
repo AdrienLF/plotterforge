@@ -1,12 +1,13 @@
 <script lang="ts">
   import { studio } from "../lib/state.svelte";
 
-  type Step = "pathfinding" | "generate" | "plot";
+  type Step = "pathfinding" | "generate" | "composition" | "plot";
   let { onSelect }: { onSelect: (step: Step) => void } = $props();
 
   const steps: { id: Step; label: string }[] = [
     { id: "pathfinding", label: "Path Finding" },
     { id: "generate", label: "Generate" },
+    { id: "composition", label: "Composition" },
     { id: "plot", label: "Plot" },
   ];
 </script>

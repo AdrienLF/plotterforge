@@ -4,7 +4,6 @@
     A4_PORTRAIT,
     alignPlacement,
     clampPlacement,
-    parseSvgSizeMm,
     snapPlacement,
     type AlignMode,
   } from "../lib/placement";
@@ -23,6 +22,7 @@
   let lastY = 0;
   let pageEl: HTMLDivElement;
   let placementPointer: HTMLElement | null = null;
+  let placementLayerId: string | null = null;
   let placementStart = { x: 0, y: 0 };
   let placementOrigin = { x: 0, y: 0 };
   let snapGuideX = $state<number | null>(null);
@@ -40,20 +40,20 @@
   });
 
   const page = $derived.by(() => {
-    if (studio.previewSvg && studio.settings) {
-      return {
-        w: Number(studio.settings.paper_width) || 297,
-        h: Number(studio.settings.paper_height) || 420,
-        bg: areaPage.bg,
-        canvas: "#fff",
-      };
-    }
-    return areaPage;
+    const compPage = studio.composition.page;
+    return {
+      w: Number(compPage.width) || 297,
+      h: Number(compPage.height) || 420,
+      bg: areaPage.bg,
+      canvas: "#fff",
+    };
   });
 
+  const selectedLayer = $derived(studio.selectedLayer);
+
   const drawingSize = $derived.by(() => {
-    if (!studio.previewSvg) return { w: page.w, h: page.h };
-    return parseSvgSizeMm(studio.previewSvg, { w: page.w, h: page.h });
+    if (!selectedLayer) return { w: page.w, h: page.h };
+    return { w: selectedLayer.width, h: selectedLayer.height };
   });
 
   const a4Guide = $derived.by(() => ({
@@ -123,49 +123,69 @@
     };
   }
 
-  function startPlacement(e: PointerEvent) {
-    if (!studio.previewSvg) return;
+  function startPlacement(e: PointerEvent, layerId: string) {
+    const layer = studio.composition.layers.find((item) => item.id === layerId);
+    if (!layer) return;
     e.preventDefault();
     e.stopPropagation();
+    if (studio.composition.selected_layer_id !== layerId) {
+      studio.composition.selected_layer_id = layerId;
+      void api.selectLayer(layerId);
+    }
+    if (studio.step !== "composition") return;
     placing = true;
+    placementLayerId = layerId;
     placementPointer = e.currentTarget as HTMLElement;
     placementPointer.setPointerCapture(e.pointerId);
     placementStart = clientToPage(e);
-    placementOrigin = { ...studio.placement };
+    placementOrigin = { x: layer.x, y: layer.y };
   }
 
   function movePlacement(e: PointerEvent) {
+    if (!placementLayerId) return;
+    const layer = studio.composition.layers.find((item) => item.id === placementLayerId);
+    if (!layer) return;
     const mm = clientToPage(e);
     const raw = {
       x: placementOrigin.x + mm.x - placementStart.x,
       y: placementOrigin.y + mm.y - placementStart.y,
     };
     const snapped = snapPlacement(raw, drawingSize, page, A4_PORTRAIT, 4);
-    studio.placement = { x: round1(snapped.x), y: round1(snapped.y) };
+    layer.x = round1(snapped.x);
+    layer.y = round1(snapped.y);
     snapGuideX = snapped.guideX;
     snapGuideY = snapped.guideY;
   }
 
   function finishPlacement(e: PointerEvent) {
+    const layer = placementLayerId
+      ? studio.composition.layers.find((item) => item.id === placementLayerId)
+      : null;
     placing = false;
+    placementLayerId = null;
     snapGuideX = null;
     snapGuideY = null;
     placementPointer?.releasePointerCapture?.(e.pointerId);
     placementPointer = null;
-    void api.savePlacement(true);
+    if (layer) void api.patchLayer(layer.id, { x: layer.x, y: layer.y });
   }
 
   export function align(mode: AlignMode) {
-    const aligned = alignPlacement(mode, studio.placement, drawingSize, page);
-    studio.placement = { x: round1(aligned.x), y: round1(aligned.y) };
-    void api.savePlacement(true);
+    const layer = selectedLayer;
+    if (!layer) return;
+    const aligned = alignPlacement(mode, { x: layer.x, y: layer.y }, drawingSize, page);
+    layer.x = round1(aligned.x);
+    layer.y = round1(aligned.y);
+    void api.patchLayer(layer.id, { x: layer.x, y: layer.y });
   }
 
   $effect(() => {
-    if (!studio.previewSvg) return;
-    const clamped = clampPlacement(studio.placement, drawingSize, page);
-    if (Math.abs(clamped.x - studio.placement.x) > 0.05 || Math.abs(clamped.y - studio.placement.y) > 0.05) {
-      studio.placement = { x: round1(clamped.x), y: round1(clamped.y) };
+    const layer = selectedLayer;
+    if (!layer) return;
+    const clamped = clampPlacement({ x: layer.x, y: layer.y }, drawingSize, page);
+    if (Math.abs(clamped.x - layer.x) > 0.05 || Math.abs(clamped.y - layer.y) > 0.05) {
+      layer.x = round1(clamped.x);
+      layer.y = round1(clamped.y);
     }
   });
 
@@ -194,7 +214,7 @@
       style:height={`${page.h * PX_PER_MM}px`}
       style:background={page.canvas}
     >
-      {#if studio.previewSvg}
+      {#if studio.composition.layers.length}
         <div
           class="guide a4"
           style:width={`${a4Guide.w * PX_PER_MM}px`}
@@ -211,18 +231,21 @@
         {#if snapGuideY !== null}
           <div class="snap-h" style:top={`${snapGuideY * PX_PER_MM}px`}></div>
         {/if}
-        <div
-          class="art"
-          style:left={`${studio.placement.x * PX_PER_MM}px`}
-          style:top={`${studio.placement.y * PX_PER_MM}px`}
-          style:width={`${drawingSize.w * PX_PER_MM}px`}
-          style:height={`${drawingSize.h * PX_PER_MM}px`}
-          onpointerdown={startPlacement}
-          role="application"
-          aria-label="Drawing placement"
-        >
-          <div class="svgwrap">{@html studio.previewSvg}</div>
-        </div>
+        {#each studio.composition.layers.filter((layer) => layer.visible) as layer (layer.id)}
+          <div
+            class="art"
+            class:selected={layer.id === studio.composition.selected_layer_id}
+            style:left={`${layer.x * PX_PER_MM}px`}
+            style:top={`${layer.y * PX_PER_MM}px`}
+            style:width={`${layer.width * PX_PER_MM}px`}
+            style:height={`${layer.height * PX_PER_MM}px`}
+            onpointerdown={(e) => startPlacement(e, layer.id)}
+            role="application"
+            aria-label={`Layer ${layer.name}`}
+          >
+            <div class="svgwrap">{@html layer.svg}</div>
+          </div>
+        {/each}
       {:else if studio.imageUrl}
         <img class="src" src={studio.imageUrl} alt="source" />
       {:else}
@@ -326,6 +349,10 @@
     position: absolute;
     touch-action: none;
     z-index: 4;
+  }
+  .art.selected {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
   }
   .art:active {
     cursor: grabbing;

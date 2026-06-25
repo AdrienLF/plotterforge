@@ -13,6 +13,7 @@
   import Panel from "./components/Panel.svelte";
   import PathFindingPanel from "./components/panels/PathFindingPanel.svelte";
   import GeneratePanel from "./components/panels/GeneratePanel.svelte";
+  import CompositionPanel from "./components/panels/CompositionPanel.svelte";
   import DrawingAreaPanel from "./components/panels/DrawingAreaPanel.svelte";
   import PensPanel from "./components/panels/PensPanel.svelte";
   import PlotterPanel from "./components/panels/PlotterPanel.svelte";
@@ -39,7 +40,7 @@
     (e.target as HTMLInputElement).value = "";
   }
 
-  type Step = "pathfinding" | "generate" | "plot";
+  type Step = "pathfinding" | "generate" | "composition" | "plot";
   function selectStep(step: Step) {
     studio.step = step;
     if (step === "plot") {
@@ -68,6 +69,11 @@
       <Panel title="Generate"><GeneratePanel /></Panel>
       <Panel title="Drawing Area" open={false}><DrawingAreaPanel /></Panel>
       <Panel title="Pens"><PensPanel /></Panel>
+      <Panel title="Versions" open={false}><VersionsPanel /></Panel>
+    {:else if studio.step === "composition"}
+      <Panel title="Layers"><CompositionPanel /></Panel>
+      <Panel title="Drawing Area" open={false}><DrawingAreaPanel /></Panel>
+      <Panel title="Pens" open={false}><PensPanel /></Panel>
       <Panel title="Versions" open={false}><VersionsPanel /></Panel>
     {:else}
       <Panel title="Plotter"><PlotterPanel /></Panel>

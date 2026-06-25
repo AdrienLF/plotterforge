@@ -4,12 +4,12 @@
 
   let { onAlign, onFit }: { onAlign: (mode: AlignMode) => void; onFit: () => void } = $props();
 
-  const placed = $derived(!!studio.previewSvg);
+  const placed = $derived(!!studio.selectedLayer);
 </script>
 
 <div class="toolbar">
   {#if placed}
-    <span class="ctx">Placement</span>
+    <span class="ctx">Layer Placement</span>
 
     <div class="group" role="group" aria-label="Align horizontally">
       <button title="Align left edges" onclick={() => onAlign("left")} aria-label="Align left edges">
@@ -35,9 +35,11 @@
       </button>
     </div>
 
-    <span class="readout">X {studio.placement.x.toFixed(1)} &nbsp; Y {studio.placement.y.toFixed(1)} <em>mm</em></span>
+    {#if studio.selectedLayer}
+      <span class="readout">X {studio.selectedLayer.x.toFixed(1)} &nbsp; Y {studio.selectedLayer.y.toFixed(1)} <em>mm</em></span>
+    {/if}
   {:else}
-    <span class="ctx muted">No drawing placed — run a Path Finding module or import an SVG.</span>
+    <span class="ctx muted">No layer selected — run Path Finding, Generate, or import an SVG.</span>
   {/if}
 
   <div class="spacer"></div>

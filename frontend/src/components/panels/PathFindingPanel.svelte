@@ -28,6 +28,23 @@
 </script>
 
 <div class="col">
+  <label class="target">
+    <span>Layer</span>
+    <select
+      value={studio.composition.selected_layer_id ?? ""}
+      onchange={(e) => api.selectLayer((e.target as HTMLSelectElement).value)}
+      disabled={!studio.composition.layers.length}
+    >
+      {#if !studio.composition.layers.length}
+        <option value="">New layer will be created</option>
+      {:else}
+        {#each studio.composition.layers as layer (layer.id)}
+          <option value={layer.id}>{layer.name}</option>
+        {/each}
+      {/if}
+    </select>
+  </label>
+
   <select class="pfm-select" value={studio.pfmId} onchange={onSelect}>
     {#each families as [family, pfms]}
       <optgroup label={family.toUpperCase()}>
@@ -58,6 +75,15 @@
 
 <style>
   .pfm-select {
+    width: 100%;
+  }
+  .target {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+  }
+  .target select {
     width: 100%;
   }
   .start {
