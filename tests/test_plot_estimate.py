@@ -1,5 +1,6 @@
 import unittest
 
+from engine.composition import Composition
 import web.server as server
 
 
@@ -13,8 +14,10 @@ class PlotEstimateTest(unittest.TestCase):
         self.old_svg = server._current_svg
         self.old_placement = server._placement
         self.old_cfg = server.cfg.copy()
+        self.old_composition = server._project.composition
         server._current_svg = SIMPLE_SVG
         server._placement = {"x": 0.0, "y": 0.0}
+        server._project.composition = Composition()
         server.cfg.update(
             {
                 "speed_pendown": 600,
@@ -36,6 +39,7 @@ class PlotEstimateTest(unittest.TestCase):
     def tearDown(self):
         server._current_svg = self.old_svg
         server._placement = self.old_placement
+        server._project.composition = self.old_composition
         server.cfg.clear()
         server.cfg.update(self.old_cfg)
 

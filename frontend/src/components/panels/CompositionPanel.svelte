@@ -25,6 +25,11 @@
 </script>
 
 <div class="composition col">
+  <label class="bounds-toggle">
+    <input type="checkbox" bind:checked={studio.showLayerBounds} />
+    <span>Show bounds</span>
+  </label>
+
   {#if studio.composition.layers.length}
     <div class="layers">
       {#each layersTopFirst as layer (layer.id)}
@@ -90,6 +95,15 @@
 <style>
   .composition {
     gap: 10px;
+  }
+  .bounds-toggle {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+  }
+  .bounds-toggle input {
+    width: auto;
   }
   .layers {
     display: flex;

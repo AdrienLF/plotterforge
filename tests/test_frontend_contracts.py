@@ -24,6 +24,16 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("disabled={!studio.hasVisibleLayers}", menu)
         self.assertNotIn("disabled={!studio.stats}", menu)
 
+    def test_composition_layer_bounds_toggle_is_visible_in_viewport(self):
+        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text()
+        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text()
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
+
+        self.assertIn("showLayerBounds", state)
+        self.assertIn("bind:checked={studio.showLayerBounds}", panel)
+        self.assertIn('class:show-bounds={studio.step === "composition" || studio.showLayerBounds}', viewport)
+        self.assertIn(".art.show-bounds", viewport)
+
 
 if __name__ == "__main__":
     unittest.main()

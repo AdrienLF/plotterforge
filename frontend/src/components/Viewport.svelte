@@ -235,6 +235,7 @@
           <div
             class="art"
             class:selected={layer.id === studio.composition.selected_layer_id}
+            class:show-bounds={studio.step === "composition" || studio.showLayerBounds}
             style:left={`${layer.x * PX_PER_MM}px`}
             style:top={`${layer.y * PX_PER_MM}px`}
             style:width={`${layer.width * PX_PER_MM}px`}
@@ -353,6 +354,13 @@
   .art.selected {
     outline: 1px solid var(--accent);
     outline-offset: 2px;
+  }
+  .art.show-bounds {
+    box-shadow: inset 0 0 0 1px rgba(46, 139, 255, 0.55);
+  }
+  .art.show-bounds:not(.selected) {
+    outline: 1px dashed rgba(46, 139, 255, 0.55);
+    outline-offset: 1px;
   }
   .art:active {
     cursor: grabbing;

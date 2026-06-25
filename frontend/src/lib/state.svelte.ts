@@ -47,6 +47,7 @@ class Studio {
     selected_layer_id: null,
     layers: [],
   });
+  showLayerBounds = $state(true);
 
   // pens
   drawingSet = $state<DrawingSetT | null>(null);
