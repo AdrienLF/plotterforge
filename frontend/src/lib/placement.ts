@@ -48,14 +48,16 @@ export function snapPlacement(
   sheet: SizeMm,
   guide: SizeMm = A4_PORTRAIT,
   threshold = 4,
+  clamp = true,
 ): SnapResult {
   const lines = snapLines(sheet, guide);
   const sx = snapAxis(pos.x, drawing.w, lines.x, threshold);
   const sy = snapAxis(pos.y, drawing.h, lines.y, threshold);
-  const clamped = clampPlacement({ x: sx.value, y: sy.value }, drawing, sheet);
+  const next = { x: sx.value, y: sy.value };
+  const placed = clamp ? clampPlacement(next, drawing, sheet) : next;
   return {
-    x: clamped.x,
-    y: clamped.y,
+    x: placed.x,
+    y: placed.y,
     guideX: sx.line,
     guideY: sy.line,
   };
@@ -66,6 +68,7 @@ export function alignPlacement(
   pos: PlacementMm,
   drawing: SizeMm,
   sheet: SizeMm,
+  clamp = true,
 ): PlacementMm {
   let { x, y } = pos;
   if (mode === "left") x = 0;
@@ -74,7 +77,8 @@ export function alignPlacement(
   if (mode === "top") y = 0;
   if (mode === "center_v") y = (sheet.h - drawing.h) / 2;
   if (mode === "bottom") y = sheet.h - drawing.h;
-  return clampPlacement({ x, y }, drawing, sheet);
+  const next = { x, y };
+  return clamp ? clampPlacement(next, drawing, sheet) : next;
 }
 
 export function parseSvgSizeMm(svgString: string, fallback: SizeMm): SizeMm {

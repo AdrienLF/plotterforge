@@ -34,6 +34,15 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn('class:show-bounds={studio.step === "composition" || studio.showLayerBounds}', viewport)
         self.assertIn(".art.show-bounds", viewport)
 
+    def test_composition_layer_movement_is_not_clamped_to_page(self):
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
+        placement = (ROOT / "frontend/src/lib/placement.ts").read_text()
+
+        self.assertIn("clamp = true", placement)
+        self.assertIn("snapPlacement(raw, drawingSize, page, A4_PORTRAIT, 4, false)", viewport)
+        self.assertIn("alignPlacement(mode, { x: layer.x, y: layer.y }, drawingSize, page, false)", viewport)
+        self.assertNotIn("clampPlacement", viewport)
+
 
 if __name__ == "__main__":
     unittest.main()

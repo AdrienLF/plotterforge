@@ -3,7 +3,6 @@
   import {
     A4_PORTRAIT,
     alignPlacement,
-    clampPlacement,
     snapPlacement,
     type AlignMode,
   } from "../lib/placement";
@@ -150,7 +149,7 @@
       x: placementOrigin.x + mm.x - placementStart.x,
       y: placementOrigin.y + mm.y - placementStart.y,
     };
-    const snapped = snapPlacement(raw, drawingSize, page, A4_PORTRAIT, 4);
+    const snapped = snapPlacement(raw, drawingSize, page, A4_PORTRAIT, 4, false);
     layer.x = round1(snapped.x);
     layer.y = round1(snapped.y);
     snapGuideX = snapped.guideX;
@@ -173,21 +172,11 @@
   export function align(mode: AlignMode) {
     const layer = selectedLayer;
     if (!layer) return;
-    const aligned = alignPlacement(mode, { x: layer.x, y: layer.y }, drawingSize, page);
+    const aligned = alignPlacement(mode, { x: layer.x, y: layer.y }, drawingSize, page, false);
     layer.x = round1(aligned.x);
     layer.y = round1(aligned.y);
     void api.patchLayer(layer.id, { x: layer.x, y: layer.y });
   }
-
-  $effect(() => {
-    const layer = selectedLayer;
-    if (!layer) return;
-    const clamped = clampPlacement({ x: layer.x, y: layer.y }, drawingSize, page);
-    if (Math.abs(clamped.x - layer.x) > 0.05 || Math.abs(clamped.y - layer.y) > 0.05) {
-      layer.x = round1(clamped.x);
-      layer.y = round1(clamped.y);
-    }
-  });
 
   function round1(value: number) {
     return Math.round(value * 10) / 10;
