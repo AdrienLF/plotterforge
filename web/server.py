@@ -16,7 +16,8 @@ from engine.pfm import REGISTRY, get as get_pfm, list_pfms
 from engine.generate import GENERATORS, get_generator, list_generators
 from engine.genframe import apply_framework
 from engine.composition import compose_visible_svg, layer_svg_zip, replace_selected_layer
-from engine.project import get_or_create
+from engine import project as project_mod
+from engine.project import Project, get_or_create
 
 app = Flask(__name__)
 
@@ -80,6 +81,24 @@ _project        = get_or_create('default')
 _drawing        = None    # last engine.Drawing produced
 _process_thread = None
 _process_lock   = threading.Lock()
+
+def _project_public(p):
+    has_image = bool(p.image_path and p.image_path.exists())
+    return {
+        'id': p.id,
+        'name': p.name,
+        'image_name': p.image_name,
+        'image_url': f'/api/source-image?v={int(time.time() * 1000)}' if has_image else None,
+    }
+
+def _switch_project(pid):
+    global _project, _drawing, _current_svg, _placement
+    _project = get_or_create(pid)
+    _drawing = None
+    _current_svg = None
+    _placement = {'x': 0.0, 'y': 0.0}
+    _sync_current_svg_from_composition()
+    return _project
 
 def _composition():
     return _project.composition
@@ -1144,6 +1163,48 @@ def stream():
         mimetype='text/event-stream',
         headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
     )
+
+# ── Projects ────────────────────────────────────────────────────────────────
+
+@app.route('/api/projects')
+def api_projects():
+    return jsonify(projects=project_mod.list_projects(), current=_project_public(_project))
+
+@app.route('/api/projects', methods=['POST'])
+def api_project_create():
+    name = (request.json or {}).get('name') or 'Untitled'
+    p = project_mod.create_project(name)
+    _switch_project(p.id)
+    return jsonify(ok=True, current=_project_public(_project), projects=project_mod.list_projects())
+
+@app.route('/api/projects/<pid>/open', methods=['POST'])
+def api_project_open(pid):
+    if not (project_mod.PROJECTS_DIR / pid / 'project.json').exists():
+        return jsonify(error='Unknown project'), 404
+    _switch_project(pid)
+    return jsonify(ok=True, current=_project_public(_project), projects=project_mod.list_projects())
+
+@app.route('/api/projects/<pid>', methods=['PATCH'])
+def api_project_rename(pid):
+    name = str((request.json or {}).get('name') or '').strip() or 'Untitled'
+    if pid == _project.id:
+        _project.name = name
+        _project.save()
+    elif (project_mod.PROJECTS_DIR / pid / 'project.json').exists():
+        p = Project.load(pid)
+        p.name = name
+        p.save()
+    else:
+        return jsonify(error='Unknown project'), 404
+    return jsonify(ok=True, current=_project_public(_project), projects=project_mod.list_projects())
+
+@app.route('/api/projects/<pid>', methods=['DELETE'])
+def api_project_delete(pid):
+    project_mod.delete_project(pid)
+    if pid == _project.id:
+        remaining = project_mod.list_projects()
+        _switch_project(remaining[0]['id'] if remaining else project_mod.create_project('Untitled').id)
+    return jsonify(ok=True, current=_project_public(_project), projects=project_mod.list_projects())
 
 @app.route('/api/composition')
 def api_composition():

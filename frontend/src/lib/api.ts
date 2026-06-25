@@ -60,7 +60,7 @@ function flushGenerate() {
 
 export const api = {
   async boot() {
-    const [list, gens, area, pens, settings, plotJob, composition] = await Promise.all([
+    const [list, gens, area, pens, settings, plotJob, composition, projects] = await Promise.all([
       jget("/api/pfm/list"),
       jget("/api/generate/list"),
       jget("/api/area"),
@@ -68,6 +68,7 @@ export const api = {
       jget("/api/settings"),
       jget("/api/plot/job"),
       jget("/api/composition"),
+      jget("/api/projects"),
     ]);
     studio.pfms = list.pfms;
     studio.backend = list.backend;
@@ -79,9 +80,46 @@ export const api = {
     studio.settings = { ...settings, reordering: normalizeReordering(settings.reordering) };
     studio.plotJob = plotJob;
     this.applyComposition(composition);
+    this.applyProject(projects);
     await this.selectPfm(studio.pfmId);
     await this.selectGenerator(studio.generatorId);
     await this.refreshVersions();
+  },
+
+  applyProject(payload: any) {
+    if (payload?.projects) studio.projects = payload.projects;
+    if (payload?.current) {
+      studio.currentProject = { id: payload.current.id, name: payload.current.name };
+      studio.imageName = payload.current.image_name || "";
+      studio.imageUrl = payload.current.image_url ?? null;
+    }
+  },
+
+  // Reload everything for a freshly created/opened project.
+  async switchProject(payload: any) {
+    this.applyProject(payload);
+    studio.previewSvg = null;
+    studio.stats = null;
+    studio.plotProgress = null;
+    studio.step = "composition";
+    await this.boot();
+  },
+
+  async newProject(name: string) {
+    await this.switchProject(await jpost("/api/projects", { name }));
+  },
+
+  async openProject(id: string) {
+    if (id === studio.currentProject?.id) return;
+    await this.switchProject(await jpost(`/api/projects/${id}/open`));
+  },
+
+  async renameProject(id: string, name: string) {
+    this.applyProject(await jpost(`/api/projects/${id}`, { name }, "PATCH"));
+  },
+
+  async deleteProject(id: string) {
+    await this.switchProject(await jpost(`/api/projects/${id}`, undefined, "DELETE"));
   },
 
   applyComposition(payload: any) {

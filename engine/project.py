@@ -193,3 +193,33 @@ def get_or_create(pid: str = "default") -> Project:
     if not (p.dir / "project.json").exists():
         p.save()
     return p
+
+
+def list_projects() -> list[dict]:
+    """All projects on disk, most-recently-modified first."""
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    out = []
+    for d in PROJECTS_DIR.iterdir():
+        manifest = d / "project.json"
+        if not (d.is_dir() and manifest.exists()):
+            continue
+        try:
+            name = json.loads(manifest.read_text()).get("name", d.name)
+        except Exception:
+            name = d.name
+        out.append({"id": d.name, "name": name, "mtime": manifest.stat().st_mtime})
+    out.sort(key=lambda p: p["mtime"], reverse=True)
+    return out
+
+
+def create_project(name: str = "Untitled") -> Project:
+    PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    p = Project(uuid.uuid4().hex[:10])
+    p.name = name or "Untitled"
+    p.ensure_dirs()
+    p.save()
+    return p
+
+
+def delete_project(pid: str) -> None:
+    shutil.rmtree(PROJECTS_DIR / pid, ignore_errors=True)

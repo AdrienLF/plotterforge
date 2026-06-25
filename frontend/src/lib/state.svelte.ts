@@ -24,6 +24,10 @@ class Studio {
   // backend
   backend = $state("…");
 
+  // projects
+  projects = $state<{ id: string; name: string }[]>([]);
+  currentProject = $state<{ id: string; name: string } | null>(null);
+
   // path finding
   pfms = $state<PfmInfo[]>([]);
   pfmId = $state("voronoi_stippling");

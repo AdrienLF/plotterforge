@@ -4,33 +4,127 @@
 
   let { onImport, onPlot }: { onImport: () => void; onPlot: () => void } = $props();
 
+  // Controlled menus: only one open at a time; clicking an item or anywhere
+  // outside closes them, and Escape closes too.
+  let open = $state<string | null>(null);
+
+  function toggle(id: string) {
+    open = open === id ? null : id;
+  }
+  function close() {
+    open = null;
+  }
+  // Run a menu action and close the menu.
+  function run(fn: () => void) {
+    close();
+    fn();
+  }
+
   function exportSvg(split: boolean) {
     window.location.href = api.exportUrl(split);
   }
+
+  async function newProject() {
+    const name = window.prompt("New project name", "Untitled");
+    if (name === null) return;
+    await api.newProject(name.trim() || "Untitled");
+  }
+  async function renameCurrent() {
+    const cur = studio.currentProject;
+    if (!cur) return;
+    const name = window.prompt("Rename project", cur.name);
+    if (name === null) return;
+    await api.renameProject(cur.id, name.trim() || cur.name);
+  }
+  async function deleteCurrent() {
+    const cur = studio.currentProject;
+    if (!cur) return;
+    if (!window.confirm(`Delete project “${cur.name}”? This cannot be undone.`)) return;
+    await api.deleteProject(cur.id);
+  }
 </script>
+
+<svelte:window onclick={close} onkeydown={(e) => e.key === "Escape" && close()} />
 
 <div class="menubar">
   <span class="brand">✦ Plotter Studio</span>
 
-  <details class="menu">
-    <summary>File</summary>
-    <div class="items">
-      <button onclick={onImport}>Import image…</button>
-      <button disabled={!studio.hasVisibleLayers} onclick={() => exportSvg(false)}>Export SVG</button>
-      <button disabled={!studio.hasVisibleLayers} onclick={() => exportSvg(true)}>Export layers (zip)</button>
-    </div>
-  </details>
+  <div class="menu" class:open={open === "file"}>
+    <button
+      class="summary"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggle("file");
+      }}
+      onmouseenter={() => open && (open = "file")}
+    >
+      File
+    </button>
+    {#if open === "file"}
+      <div class="items">
+        <button onclick={() => run(onImport)}>Import image…</button>
+        <button disabled={!studio.hasVisibleLayers} onclick={() => run(() => exportSvg(false))}>Export SVG</button>
+        <button disabled={!studio.hasVisibleLayers} onclick={() => run(() => exportSvg(true))}>Export layers (zip)</button>
+      </div>
+    {/if}
+  </div>
 
-  <details class="menu">
-    <summary>Drawing</summary>
-    <div class="items">
-      <button disabled={!studio.imageUrl} onclick={() => api.process()}>Run path finding</button>
-      <button disabled={!studio.hasVisibleLayers} onclick={onPlot}>Plot…</button>
-    </div>
-  </details>
+  <div class="menu" class:open={open === "project"}>
+    <button
+      class="summary"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggle("project");
+      }}
+      onmouseenter={() => open && (open = "project")}
+    >
+      Project
+    </button>
+    {#if open === "project"}
+      <div class="items">
+        <button onclick={() => run(() => void newProject())}>New project…</button>
+        <button onclick={() => run(() => void renameCurrent())} disabled={!studio.currentProject}>Rename current…</button>
+        <button class="danger-text" onclick={() => run(() => void deleteCurrent())} disabled={!studio.currentProject}>Delete current…</button>
+        {#if studio.projects.length}
+          <div class="sep"></div>
+          <div class="label">Open</div>
+          <div class="list">
+            {#each studio.projects as p (p.id)}
+              <button
+                class:current={p.id === studio.currentProject?.id}
+                onclick={() => run(() => void api.openProject(p.id))}
+              >
+                {p.id === studio.currentProject?.id ? "● " : ""}{p.name}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <div class="menu" class:open={open === "drawing"}>
+    <button
+      class="summary"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggle("drawing");
+      }}
+      onmouseenter={() => open && (open = "drawing")}
+    >
+      Drawing
+    </button>
+    {#if open === "drawing"}
+      <div class="items">
+        <button disabled={!studio.imageUrl} onclick={() => run(() => api.process())}>Run path finding</button>
+        <button disabled={!studio.hasVisibleLayers} onclick={() => run(onPlot)}>Plot…</button>
+      </div>
+    {/if}
+  </div>
 
   <div class="spacer"></div>
-  <span class="doc muted">{studio.imageName || "no image"}</span>
+  <span class="doc muted">{studio.currentProject?.name ?? "—"}</span>
+  <span class="doc muted dim">· {studio.imageName || "no image"}</span>
 </div>
 
 <style>
@@ -51,16 +145,17 @@
   .menu {
     position: relative;
   }
-  .menu summary {
+  .summary {
     list-style: none;
     cursor: pointer;
     padding: 3px 9px;
     border-radius: 4px;
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
   }
-  .menu summary::-webkit-details-marker {
-    display: none;
-  }
-  .menu[open] summary {
+  .menu.open .summary {
     background: var(--accent);
     color: white;
   }
@@ -75,7 +170,7 @@
     padding: 4px;
     display: flex;
     flex-direction: column;
-    min-width: 170px;
+    min-width: 180px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   }
   .items button {
@@ -89,7 +184,34 @@
     background: var(--accent);
     color: white;
   }
+  .items .danger-text {
+    color: var(--danger);
+  }
+  .sep {
+    height: 1px;
+    background: var(--line);
+    margin: 4px 0;
+  }
+  .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    padding: 2px 8px;
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .list .current {
+    color: var(--accent);
+  }
   .doc {
     font-size: 12px;
+  }
+  .doc.dim {
+    color: var(--text-dim);
   }
 </style>
