@@ -1473,7 +1473,7 @@ def _process_worker(pfm_id, params, seed):
         _project.params = validate(pfm.params, params)
         _replace_selected_composition_layer(
             svg,
-            p.name,
+            pfm.name,
             'pathfinding',
             {
                 'pfm_id': pfm_id,
