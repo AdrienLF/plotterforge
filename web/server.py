@@ -157,12 +157,21 @@ def _project_public(p):
 
 def _switch_project(pid):
     global _project, _drawing, _current_svg, _placement
+    _clear_events()
+    _clear_last_proc_events()
+    _clear_last_plot_events()
     _project = get_or_create(pid)
     _drawing = None
     _current_svg = None
     _placement = {'x': 0.0, 'y': 0.0}
     _sync_current_svg_from_composition()
     return _project
+
+def _project_transition_blocked():
+    if ((_process_thread and _process_thread.is_alive())
+            or (_plot_thread and _plot_thread.is_alive())):
+        return jsonify(error='Project transition blocked while work is active'), 409
+    return None
 
 def _composition():
     return _project.composition
@@ -1587,6 +1596,9 @@ def api_projects():
 
 @app.route('/api/projects', methods=['POST'])
 def api_project_create():
+    blocked = _project_transition_blocked()
+    if blocked:
+        return blocked
     name = (request.json or {}).get('name') or 'Untitled'
     p = project_mod.create_project(name)
     _switch_project(p.id)
@@ -1596,6 +1608,9 @@ def api_project_create():
 def api_project_open(pid):
     if not (project_mod.PROJECTS_DIR / pid / 'project.json').exists():
         return jsonify(error='Unknown project'), 404
+    blocked = _project_transition_blocked()
+    if blocked:
+        return blocked
     _switch_project(pid)
     return jsonify(ok=True, current=_project_public(_project), projects=project_mod.list_projects())
 
@@ -1615,6 +1630,10 @@ def api_project_rename(pid):
 
 @app.route('/api/projects/<pid>', methods=['DELETE'])
 def api_project_delete(pid):
+    if pid == _project.id:
+        blocked = _project_transition_blocked()
+        if blocked:
+            return blocked
     project_mod.delete_project(pid)
     if pid == _project.id:
         remaining = project_mod.list_projects()
