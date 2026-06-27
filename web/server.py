@@ -1018,7 +1018,17 @@ def _save_plot_job(job):
     job['updated_at'] = _now_ms()
     tmp = PLOT_JOB_PATH.with_suffix(PLOT_JOB_PATH.suffix + '.tmp')
     tmp.write_text(json.dumps(job, indent=2))
-    tmp.replace(PLOT_JOB_PATH)
+    # ponytail: Windows raises PermissionError (WinError 5) on rapid renames when
+    # an AV/indexer or concurrent reader briefly holds the target; retry ~200ms so
+    # a single transient lock can't abort a plot mid-job.
+    for attempt in range(10):
+        try:
+            tmp.replace(PLOT_JOB_PATH)
+            break
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.02)
     return job
 
 def _load_plot_job():
@@ -1110,6 +1120,53 @@ def _plot_job_public(job):
 
 # ── Plotter driver ────────────────────────────────────────────────────────────
 
+# ponytail: test-only Grbl stub so plot/manual flows run in e2e without hardware.
+# Gated on PLOTTER_FAKE_SERIAL; never touches the real serial path in production.
+_FAKE_SERIAL_WRITES = []  # decoded command lines captured for test assertions (K7)
+
+
+class _FakeGrbl:
+    """Minimal pyserial stand-in that speaks just enough Grbl to satisfy
+    PlotterConn / the /api/manual handler: every command line gets an 'ok',
+    and a '?' status query gets an Idle status report."""
+
+    def __init__(self):
+        self._out = bytearray()
+
+    def write(self, data):
+        if data == b'\x18':  # soft-reset: no reply expected
+            return len(data)
+        for line in bytes(data).decode('utf-8', 'replace').splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            _FAKE_SERIAL_WRITES.append(line)
+            if line == '?':
+                self._out += b'<Idle|MPos:0.000,0.000,0.000|FS:0,0>\r\n'
+            else:
+                self._out += b'ok\r\n'
+        return len(data)
+
+    def readline(self):
+        nl = self._out.find(b'\n')
+        if nl < 0:
+            chunk, self._out = bytes(self._out), bytearray()
+            return chunk
+        chunk, self._out = bytes(self._out[:nl + 1]), self._out[nl + 1:]
+        return chunk
+
+    def read(self, n=1):
+        chunk, self._out = bytes(self._out[:n]), self._out[n:]
+        return chunk
+
+    @property
+    def in_waiting(self):
+        return len(self._out)
+
+    def close(self):
+        pass
+
+
 def open_serial(port, timeout=0.1):
     """Open a plotter connection.
 
@@ -1117,6 +1174,8 @@ def open_serial(port, timeout=0.1):
     pyserial URL — notably 'socket://HOST:PORT' to reach a plotter shared over
     the network (e.g. the Pi's socat bridge at socket://100.92.241.24:4000).
     """
+    if os.environ.get('PLOTTER_FAKE_SERIAL'):
+        return _FakeGrbl()
     if '://' in str(port):
         return serial.serial_for_url(port, baudrate=115200, timeout=timeout)
     return serial.Serial(port, 115200, timeout=timeout)
@@ -1925,6 +1984,17 @@ def manual():
     except Exception as exc:
         return jsonify(error=str(exc)), 500
 
+
+# ponytail: test-only — exposes captured fake-serial G-code so e2e can assert
+# emitted commands (K7). Only registered when the fake serial is active.
+if os.environ.get('PLOTTER_FAKE_SERIAL'):
+    @app.route('/api/_test/serial-log', methods=['GET', 'DELETE'])
+    def _test_serial_log():
+        if request.method == 'DELETE':
+            _FAKE_SERIAL_WRITES.clear()
+            return jsonify(ok=True)
+        return jsonify(writes=list(_FAKE_SERIAL_WRITES))
+
 # ── Studio: image → PFM → drawing ──────────────────────────────────────────────
 
 def _area_from(data):
@@ -2340,8 +2410,8 @@ def api_export():
 
 
 if __name__ == '__main__':
-    host = '127.0.0.1'
-    port = 7438
+    host = os.environ.get('PLOTTER_HOST', '127.0.0.1')
+    port = int(os.environ.get('PLOTTER_PORT', '7438'))
     print(f'Plotter server running at http://{host}:{port}')
     LOG.info('server.start', extra={'fields': {'host': host, 'port': port}})
     app.run(host=host, port=port, debug=False, threaded=True)

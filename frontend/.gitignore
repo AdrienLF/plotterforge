@@ -1,3 +1,9 @@
 node_modules/
 .vite/
 *.tsbuildinfo
+
+# Playwright / e2e artifacts
+/test-results/
+/playwright-report/
+/e2e/perf/results.jsonl
+/e2e/perf/playwright-report.json

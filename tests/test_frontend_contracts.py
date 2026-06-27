@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class FrontendContractsTest(unittest.TestCase):
     def test_svg_upload_does_not_trigger_plot_estimate(self):
-        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text()
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
         match = re.search(
             r"async uploadSvg\(file: File\) \{(?P<body>.*?)\n  \},",
             api_ts,
@@ -19,15 +19,15 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertNotIn("refreshEstimate", match.group("body"))
 
     def test_export_menu_uses_visible_layers_not_stats(self):
-        menu = (ROOT / "frontend/src/components/MenuBar.svelte").read_text()
+        menu = (ROOT / "frontend/src/components/MenuBar.svelte").read_text(encoding="utf-8")
 
         self.assertIn("disabled={!studio.hasVisibleLayers}", menu)
         self.assertNotIn("disabled={!studio.stats}", menu)
 
     def test_composition_layer_bounds_toggle_is_visible_in_viewport(self):
-        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text()
-        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text()
-        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
+        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text(encoding="utf-8")
+        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text(encoding="utf-8")
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text(encoding="utf-8")
 
         self.assertIn("showLayerBounds", state)
         self.assertIn("bind:checked={studio.showLayerBounds}", panel)
@@ -35,8 +35,8 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn(".art.show-bounds", viewport)
 
     def test_composition_layer_movement_is_not_clamped_to_page(self):
-        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
-        placement = (ROOT / "frontend/src/lib/placement.ts").read_text()
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text(encoding="utf-8")
+        placement = (ROOT / "frontend/src/lib/placement.ts").read_text(encoding="utf-8")
 
         self.assertIn("clamp = true", placement)
         self.assertIn("snapPlacement(raw, drawingSize, page, A4_PORTRAIT, 4, false)", viewport)
@@ -46,8 +46,8 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertNotIn("clampPlacement", viewport)
 
     def test_region_types_and_state_exist(self):
-        types = (ROOT / "frontend/src/lib/types.ts").read_text()
-        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text()
+        types = (ROOT / "frontend/src/lib/types.ts").read_text(encoding="utf-8")
+        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text(encoding="utf-8")
 
         self.assertIn("export interface RegionT", types)
         self.assertIn("export interface SegmentationPromptT", types)
@@ -56,7 +56,7 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("regionDraftMask = $state<string | null>(null)", state)
 
     def test_process_sends_selected_region_id(self):
-        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text()
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
         match = re.search(
             r"async process\(\) \{(?P<body>.*?)\n  \},",
             api_ts,
@@ -69,7 +69,7 @@ class FrontendContractsTest(unittest.TestCase):
     def test_path_finding_window_exposes_region_controls(self):
         # Region creation lives in the unified floating Path Finding window now,
         # not a left-dock panel.
-        panel = (ROOT / "frontend/src/components/panels/LayerStylePanel.svelte").read_text()
+        panel = (ROOT / "frontend/src/components/panels/LayerStylePanel.svelte").read_text(encoding="utf-8")
 
         self.assertIn("Create AI region", panel)
         self.assertIn("Save region", panel)
@@ -77,7 +77,7 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("invertRegion", panel)
 
     def test_viewport_supports_source_region_selection(self):
-        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text(encoding="utf-8")
 
         self.assertIn("region-select-overlay", viewport)
         self.assertIn("api.predictRegion", viewport)
@@ -85,11 +85,11 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("e.button === 2 || e.altKey", viewport)
 
     def test_layer_style_panel_contract_exists(self):
-        app = (ROOT / "frontend/src/App.svelte").read_text()
-        panel = (ROOT / "frontend/src/components/panels/LayerStylePanel.svelte").read_text()
-        types = (ROOT / "frontend/src/lib/types.ts").read_text()
-        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text()
-        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text()
+        app = (ROOT / "frontend/src/App.svelte").read_text(encoding="utf-8")
+        panel = (ROOT / "frontend/src/components/panels/LayerStylePanel.svelte").read_text(encoding="utf-8")
+        types = (ROOT / "frontend/src/lib/types.ts").read_text(encoding="utf-8")
+        state = (ROOT / "frontend/src/lib/state.svelte.ts").read_text(encoding="utf-8")
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
 
         self.assertIn("LayerStylePanel", app)
         self.assertIn("layerStyleOpen = $state(false)", state)
@@ -104,21 +104,21 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("occlude_below", panel)
 
     def test_composition_panel_opens_layer_style_and_toggles_occlusion(self):
-        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text()
+        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text(encoding="utf-8")
 
         self.assertIn("openLayerStyle", panel)
         self.assertIn("studio.layerStyleOpen = true", panel)
         self.assertIn("occlude_below", panel)
 
     def test_layers_panel_shows_applied_algorithm(self):
-        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text()
+        panel = (ROOT / "frontend/src/components/panels/CompositionPanel.svelte").read_text(encoding="utf-8")
 
         # The Photoshop-style layers list surfaces which PFM is baked into a layer.
         self.assertIn("appliedAlgo", panel)
         self.assertIn("pathfinding_style", panel)
 
     def test_layers_panel_is_always_visible(self):
-        app = (ROOT / "frontend/src/App.svelte").read_text()
+        app = (ROOT / "frontend/src/App.svelte").read_text(encoding="utf-8")
 
         # Layers panel is rendered outside the per-step branches (not step-gated),
         # and the path-finding controls are no longer a left-dock panel.
@@ -126,7 +126,7 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertNotIn("PathFindingPanel", app)
 
     def test_viewport_renders_live_occlusion(self):
-        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text()
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text(encoding="utf-8")
 
         # Occlusion is composited live via cheap opaque knockout rects (clipping a
         # huge stippling SVG with clip-path was too slow).
