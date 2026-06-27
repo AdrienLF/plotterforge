@@ -86,6 +86,23 @@ test("E4: rot1_x knob changes output; reverting produces the same SVG (determini
   expect(svg3, "same params + same seed must produce the same SVG").toBe(svg1);
 });
 
+// E6 [P]: generate timing — spokes_and_circles with defaults should finish within soft budget.
+test("E6: spokes_and_circles generate timing", async ({ page, request, baseURL, recordPerf }) => {
+  await freshProject(request, baseURL!, "E2E E6");
+  await gotoApp(page);
+
+  const t0 = Date.now();
+  await page.getByRole("button", { name: "＋ Generator" }).click();
+  await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
+  const duration_ms = Date.now() - t0;
+
+  recordPerf({ story: "E6", duration_ms });
+  const budget = 5_000;
+  if (duration_ms > budget) console.warn(`[perf] E6: generate ${duration_ms}ms > budget ${budget}ms (soft)`);
+  console.log(`[perf] E6: spokes_and_circles ${duration_ms}ms`);
+});
+
 // E5: the target selector generates into a new layer or updates an existing one in place.
 test("E5: target selector — new layer vs existing layer", async ({ page, request, baseURL }) => {
   await freshProject(request, baseURL!, "E2E E5");

@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding, gotoStep } from "./fixtures";
+import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding, gotoStep, waitForReady } from "./fixtures";
 
 // M1 [R+P]: Import → 2 PF layers (different algorithms) → load pens → export SVG.
 // Skips the SAM2 region step (D-epic, gated on model availability).
@@ -98,4 +98,32 @@ test("M3: photo → plot dry-run — import, path finding, estimate, plot to com
   // The fake serial received real G-code — confirms the plotter path ran end-to-end.
   const log = await (await request.get(`${baseURL}/api/_test/serial-log`)).json();
   expect(log.writes.some((c: string) => c.startsWith("G00") || c.startsWith("G01"))).toBeTruthy();
+});
+
+// M4 [U]: new-user happy path — blank app → import image → path finding → Export SVG enabled.
+// Records the number of UI interactions as a UX baseline. Goal: ≤ 5 steps.
+test("M4: new-user happy path — import → run → export reachable in ≤ 5 steps", async ({ page, request, baseURL, recordPerf }) => {
+  await freshProject(request, baseURL!, "E2E M4");
+  await gotoApp(page);
+
+  let steps = 0;
+
+  // Step 1: import image via the hidden file input.
+  await importImage(page, join(ASSETS, "sample.png"));
+  steps++;
+
+  // Step 2: run path finding.
+  await page.locator('button[title="Run path finding"]').click();
+  steps++;
+  await waitForReady(page);
+
+  // Steps 3 + 4: open File menu → verify Export SVG is enabled.
+  await page.getByRole("button", { name: "File" }).click();
+  steps++;
+  await expect(page.getByRole("button", { name: "Export SVG" })).toBeEnabled();
+  await page.keyboard.press("Escape");
+
+  recordPerf({ story: "M4", duration_ms: steps }); // duration_ms carries step count
+  console.log(`[perf] M4: new-user happy path in ${steps} steps`);
+  expect(steps, "first export reachable within 5 UI steps").toBeLessThanOrEqual(5);
 });

@@ -144,6 +144,63 @@ test("C5: display-mode toggle saves to the layer", async ({ page, request, baseU
   expect(c2.layers.find((l: { id: string }) => l.id === layerId)?.display_mode).toBe("both");
 });
 
+// C10 [P]: GPU vs CPU — record backend type and voronoi_stippling timing (informational).
+test("C10: voronoi_stippling timing on current backend (GPU/CPU)", async ({ request, baseURL, recordPerf }) => {
+  const { backend } = await (await request.get(`${baseURL}/api/pfm/list`)).json();
+
+  await freshProject(request, baseURL!, "E2E C10");
+  await request.post(`${baseURL}/api/image`, {
+    multipart: {
+      file: { name: "sample.png", mimeType: "image/png", buffer: readFileSync(join(ASSETS, "sample.png")) },
+    },
+  });
+  const add = await (await request.post(`${baseURL}/api/composition/add-layer`, { data: {} })).json();
+  const layerId: string = add.composition.layers.at(-1).id;
+
+  const t0 = Date.now();
+  const r = await request.post(`${baseURL}/api/composition/layers/${layerId}/pathfinding/generate`, {
+    data: { pfm_id: "voronoi_stippling", params: { point_density: 500 } },
+  });
+  const duration_ms = Date.now() - t0;
+  expect(r.ok(), "voronoi_stippling should generate").toBeTruthy();
+
+  recordPerf({ story: "C10", pfm: `voronoi_stippling/${backend}`, duration_ms });
+  // Informational only — no hard assertion. GPU should be faster than CPU over many runs.
+  console.log(`[perf] C10: voronoi_stippling on ${backend}: ${duration_ms}ms`);
+});
+
+// C12 [U]: editor discoverability — from "＋ Path finding" to first rendered result in minimal clicks.
+// UX baseline: 2 user actions (add layer → apply). Record as regression guard.
+test("C12: path-finding editor — first result in ≤ 3 clicks", async ({ page, request, baseURL, recordPerf }) => {
+  await freshProject(request, baseURL!, "E2E C12");
+  await request.post(`${baseURL}/api/image`, {
+    multipart: {
+      file: { name: "sample.png", mimeType: "image/png", buffer: readFileSync(join(ASSETS, "sample.png")) },
+    },
+  });
+  await gotoApp(page);
+
+  let clicks = 0;
+
+  // Click 1: add a path-finding layer (opens the editor).
+  await page.getByRole("button", { name: "＋ Path finding" }).click();
+  clicks++;
+  await expect(page.locator('[aria-label="Layer style"]')).toBeVisible({ timeout: 5_000 });
+
+  // Click 2: apply / regenerate.
+  await page.getByRole("button", { name: "Apply / Regenerate" }).click();
+  clicks++;
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
+
+  // Verify geometry was produced.
+  const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+  expect(composition.layers[0]?.svg).toMatch(/<(path|circle|line)\b/);
+
+  recordPerf({ story: "C12", duration_ms: clicks }); // duration_ms stores click count
+  console.log(`[perf] C12: ${clicks} clicks to first rendered result`);
+  expect(clicks, "first result should require ≤ 3 clicks").toBeLessThanOrEqual(3);
+});
+
 // C6: "Occlude below" checkbox toggles and persists on the layer.
 test("C6: occlude-below checkbox persists to the layer", async ({ page, request, baseURL }) => {
   const layerId = await openLayerEditor(request, page, baseURL!, "E2E C6");
