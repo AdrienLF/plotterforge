@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { test, expect, ASSETS, freshProject, gotoApp } from "./fixtures";
+import { test, expect, ASSETS, freshProject, gotoApp, gotoStep } from "./fixtures";
 
 /** Set up a project with one generated PF layer; returns the layer id. */
 async function setupOneLayer(request: any, baseURL: string, name: string): Promise<string> {
@@ -82,4 +82,49 @@ test("F7: duplicate and delete layer", async ({ page, request, baseURL }) => {
   await page.locator(".layer").first().getByRole("button", { name: "Delete" }).click();
   await expect(page.locator(".layer")).toHaveCount(before, { timeout: 10_000 });
   await expect(page.locator(".layer").first()).not.toContainText("copy");
+});
+
+// F3: X/Y numeric inputs in the Composition step move the layer.
+test("F3: layer X/Y inputs update position in the backend", async ({ page, request, baseURL }) => {
+  const id = await setupOneLayer(request, baseURL!, "E2E F3");
+  await gotoApp(page);
+  await gotoStep(page, "Composition");
+
+  // Select the layer so position controls appear.
+  await page.locator(".layer .pick").first().click();
+  await expect(page.locator("#layer-x")).toBeVisible({ timeout: 5_000 });
+
+  // Note the current x from API before changing.
+  const before = await (await request.get(`${baseURL}/api/composition`)).json();
+  const xBefore: number = before.composition.layers.find((l: { id: string }) => l.id === id)?.x ?? 0;
+
+  // Change X to a different value (move 50mm from origin).
+  await page.locator("#layer-x").fill("50");
+  await page.locator("#layer-x").press("Tab");
+
+  await page.waitForTimeout(300);
+  const after = await (await request.get(`${baseURL}/api/composition`)).json();
+  const xAfter: number = after.composition.layers.find((l: { id: string }) => l.id === id)?.x ?? 0;
+
+  // Layer x should have changed from its previous value.
+  expect(xAfter).not.toBeCloseTo(xBefore, 0);
+});
+
+// F4: Scale % input resizes the layer proportionally.
+test("F4: scale % input resizes the layer", async ({ page, request, baseURL }) => {
+  const id = await setupOneLayer(request, baseURL!, "E2E F4");
+  await gotoApp(page);
+  await gotoStep(page, "Composition");
+
+  await page.locator(".layer .pick").first().click();
+  await expect(page.locator("#layer-scale")).toBeVisible({ timeout: 5_000 });
+
+  // Halve the size.
+  await page.locator("#layer-scale").fill("50");
+  await page.locator("#layer-scale").press("Tab");
+
+  await page.waitForTimeout(300);
+  const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+  const layer = composition.layers.find((l: { id: string }) => l.id === id);
+  expect(layer?.scale).toBeCloseTo(0.5, 2);
 });
