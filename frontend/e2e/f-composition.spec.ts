@@ -128,3 +128,31 @@ test("F4: scale % input resizes the layer", async ({ page, request, baseURL }) =
   const layer = composition.layers.find((l: { id: string }) => l.id === id);
   expect(layer?.scale).toBeCloseTo(0.5, 2);
 });
+
+// F5: "To content" sets a crop rect on the layer; "Reset" clears it.
+test("F5: crop 'To content' sets crop rect; Reset clears it", async ({ page, request, baseURL }) => {
+  const id = await setupOneLayer(request, baseURL!, "E2E F5");
+  await gotoApp(page);
+  await gotoStep(page, "Composition");
+
+  // Select the layer so the X/Y/scale/crop controls appear.
+  await page.locator(".layer .pick").first().click();
+  await expect(page.locator("#layer-x")).toBeVisible({ timeout: 5_000 });
+
+  // "To content" tightens the crop to the SVG geometry bounding box.
+  await page.getByRole("button", { name: "To content" }).click();
+
+  await page.waitForTimeout(300);
+  const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+  const layer = composition.layers.find((l: { id: string }) => l.id === id);
+  expect(layer?.crop, "'To content' should set a non-null crop rect").not.toBeNull();
+
+  // "Reset" button appears after a crop is applied.
+  await expect(page.getByRole("button", { name: "Reset" })).toBeVisible({ timeout: 3_000 });
+  await page.getByRole("button", { name: "Reset" }).click();
+
+  await page.waitForTimeout(300);
+  const { composition: c2 } = await (await request.get(`${baseURL}/api/composition`)).json();
+  const l2 = c2.layers.find((l: { id: string }) => l.id === id);
+  expect(l2?.crop, "Reset should clear the crop back to null").toBeNull();
+});

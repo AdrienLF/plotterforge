@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { test, expect, ASSETS, freshProject, gotoApp } from "./fixtures";
+import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding, gotoStep } from "./fixtures";
 
 // M1 [R+P]: Import → 2 PF layers (different algorithms) → load pens → export SVG.
 // Skips the SAM2 region step (D-epic, gated on model availability).
@@ -71,4 +71,31 @@ test("M2: generator-only artwork — generate, version, export", async ({ page, 
   const svg = await r.text();
   expect(svg).toMatch(/^<svg\s/);
   expect(svg).toContain("</svg>");
+});
+
+// M3 [R+P]: Photo → plot dry-run — full UI journey: import → PFM → estimate → plot → done.
+// Tests the end-to-end "real user" flow against the fake serial (PLOTTER_FAKE_SERIAL=1).
+test("M3: photo → plot dry-run — import, path finding, estimate, plot to completion", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E M3");
+  await gotoApp(page);
+
+  // Import image via UI.
+  await importImage(page, join(ASSETS, "sample.png"));
+
+  // Run path finding via UI — waits for SSE "Ready".
+  await runPathFinding(page);
+
+  // Navigate to Plot step — estimate auto-refreshes.
+  await gotoStep(page, "Plot");
+  const pathCount = page.locator(".metrics div", { hasText: "Paths" }).locator("strong");
+  await expect(pathCount).not.toHaveText("—", { timeout: 20_000 });
+
+  // Clear serial log, start the plot, and wait for the fake plotter to finish.
+  await request.delete(`${baseURL}/api/_test/serial-log`);
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(page.locator(".status .state")).toHaveText("Done", { timeout: 60_000 });
+
+  // The fake serial received real G-code — confirms the plotter path ran end-to-end.
+  const log = await (await request.get(`${baseURL}/api/_test/serial-log`)).json();
+  expect(log.writes.some((c: string) => c.startsWith("G00") || c.startsWith("G01"))).toBeTruthy();
 });
