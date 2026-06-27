@@ -60,6 +60,23 @@ function normalizeReordering(value: any) {
 
 let genPending = false;
 let genTimer: ReturnType<typeof setTimeout> | null = null;
+let projectGeneration = 0;
+
+function beginProjectGeneration() {
+  projectGeneration += 1;
+  return projectGeneration;
+}
+
+function isCurrentProject(generation: number) {
+  return generation === projectGeneration;
+}
+
+function reportBootError(error: unknown) {
+  studio.processing = false;
+  studio.status = "Error";
+  pushLog("Boot error: " + (error instanceof Error ? error.message : String(error)));
+  console.error(error);
+}
 
 function flushGenerate() {
   if (genTimer) clearTimeout(genTimer);
@@ -71,35 +88,49 @@ function flushGenerate() {
 }
 
 export const api = {
-  async boot() {
-    const [list, gens, area, pens, settings, plotJob, composition, projects, regions, segStatus] = await Promise.all([
-      jget("/api/pfm/list"),
-      jget("/api/generate/list"),
-      jget("/api/area"),
-      jget("/api/pens"),
-      jget("/api/settings"),
-      jget("/api/plot/job"),
-      jget("/api/composition"),
-      jget("/api/projects"),
-      jget("/api/regions"),
-      jget("/api/segmentation/status"),
-    ]);
-    studio.pfms = list.pfms;
-    studio.backend = list.backend;
-    studio.generators = gens.generators;
-    studio.area = area.area;
-    studio.presets = area.presets;
-    studio.drawingSet = pens.drawing_set;
-    studio.libraries = pens.libraries;
-    studio.settings = { ...settings, reordering: normalizeReordering(settings.reordering) };
-    studio.plotJob = plotJob;
-    this.applyComposition(composition);
-    this.applyProject(projects);
-    this.applyRegions(regions);
-    studio.segmentationStatus = segStatus;
-    await this.selectPfm(studio.pfmId);
-    await this.selectGenerator(studio.generatorId);
-    await this.refreshVersions();
+  invalidateProjectWork() {
+    return beginProjectGeneration();
+  },
+
+  async boot(generation = beginProjectGeneration()) {
+    try {
+      const [list, gens, area, pens, settings, plotJob, composition, projects, regions, segStatus] = await Promise.all([
+        jget("/api/pfm/list"),
+        jget("/api/generate/list"),
+        jget("/api/area"),
+        jget("/api/pens"),
+        jget("/api/settings"),
+        jget("/api/plot/job"),
+        jget("/api/composition"),
+        jget("/api/projects"),
+        jget("/api/regions"),
+        jget("/api/segmentation/status"),
+      ]);
+      if (!isCurrentProject(generation)) return false;
+      studio.pfms = list.pfms;
+      studio.backend = list.backend;
+      studio.generators = gens.generators;
+      studio.area = area.area;
+      studio.presets = area.presets;
+      studio.drawingSet = pens.drawing_set;
+      studio.libraries = pens.libraries;
+      studio.settings = { ...settings, reordering: normalizeReordering(settings.reordering) };
+      studio.plotJob = plotJob;
+      this.applyComposition(composition);
+      this.applyProject(projects);
+      this.applyRegions(regions);
+      studio.segmentationStatus = segStatus;
+      await this.selectPfm(studio.pfmId, generation);
+      if (!isCurrentProject(generation)) return false;
+      await this.selectGenerator(studio.generatorId, generation);
+      if (!isCurrentProject(generation)) return false;
+      await this.refreshVersions(generation);
+      if (!isCurrentProject(generation)) return false;
+      return true;
+    } catch (error) {
+      if (!isCurrentProject(generation)) return false;
+      throw error;
+    }
   },
 
   applyProject(payload: any) {
@@ -115,7 +146,8 @@ export const api = {
   },
 
   // Reload everything for a freshly created/opened project.
-  async switchProject(payload: any) {
+  async switchProject(payload: any, generation = beginProjectGeneration()) {
+    if (!isCurrentProject(generation)) return false;
     this.applyProject(payload);
     studio.previewSvg = null;
     studio.stats = null;
@@ -126,16 +158,44 @@ export const api = {
     studio.progress = 0;
     studio.status = "Idle";
     studio.step = "composition";
-    await this.boot();
+    studio.regionDraftMask = null;
+    studio.regionDraftBbox = null;
+    studio.regionPositivePoints = [];
+    studio.regionNegativePoints = [];
+    studio.regionSelecting = false;
+    studio.regionPredicting = false;
+    studio.maskMode = null;
+    studio.maskEdit = false;
+    studio.layerStyleOpen = false;
+    try {
+      return await this.boot(generation);
+    } catch (error) {
+      if (isCurrentProject(generation)) reportBootError(error);
+      return false;
+    }
   },
 
   async newProject(name: string) {
-    await this.switchProject(await jpost("/api/projects", { name }));
+    const generation = beginProjectGeneration();
+    try {
+      const payload = await jpost("/api/projects", { name });
+      if (!isCurrentProject(generation)) return;
+      await this.switchProject(payload, generation);
+    } catch (error) {
+      if (isCurrentProject(generation)) reportBootError(error);
+    }
   },
 
   async openProject(id: string) {
     if (id === studio.currentProject?.id) return;
-    await this.switchProject(await jpost(`/api/projects/${id}/open`));
+    const generation = beginProjectGeneration();
+    try {
+      const payload = await jpost(`/api/projects/${id}/open`);
+      if (!isCurrentProject(generation)) return;
+      await this.switchProject(payload, generation);
+    } catch (error) {
+      if (isCurrentProject(generation)) reportBootError(error);
+    }
   },
 
   async renameProject(id: string, name: string) {
@@ -143,7 +203,14 @@ export const api = {
   },
 
   async deleteProject(id: string) {
-    await this.switchProject(await jpost(`/api/projects/${id}`, undefined, "DELETE"));
+    const generation = beginProjectGeneration();
+    try {
+      const payload = await jpost(`/api/projects/${id}`, undefined, "DELETE");
+      if (!isCurrentProject(generation)) return;
+      await this.switchProject(payload, generation);
+    } catch (error) {
+      if (isCurrentProject(generation)) reportBootError(error);
+    }
   },
 
   applyComposition(payload: any) {
@@ -230,13 +297,16 @@ export const api = {
     await this.refreshEstimate(true);
   },
 
-  async selectGenerator(id: string) {
+  async selectGenerator(id: string, generation = projectGeneration) {
+    if (!isCurrentProject(generation)) return false;
     studio.generatorId = id;
     const sch = await jget(`/api/generate/${id}/schema`);
+    if (!isCurrentProject(generation)) return false;
     studio.genSchema = sch.params;
     const keep: Record<string, any> = {};
     for (const p of sch.params) keep[p.name] = studio.genParams[p.name] ?? p.default;
     studio.genParams = keep;
+    return true;
   },
 
   async generate() {
@@ -261,15 +331,18 @@ export const api = {
     flushGenerate();
   },
 
-  async selectPfm(id: string) {
+  async selectPfm(id: string, generation = projectGeneration) {
+    if (!isCurrentProject(generation)) return false;
     studio.pfmId = id;
     const sch = await jget(`/api/pfm/${id}/schema`);
+    if (!isCurrentProject(generation)) return false;
     studio.schema = sch.params;
     studio.params = { ...paramDefaults(sch.params), ...studio.params };
     // drop params not in the new schema
     const keep: Record<string, any> = {};
     for (const p of sch.params) keep[p.name] = studio.params[p.name] ?? p.default;
     studio.params = keep;
+    return true;
   },
 
   async loadLayerStyleSchema(pfmId: string) {
@@ -296,6 +369,7 @@ export const api = {
   },
 
   async predictRegion(prompt?: SegmentationPromptT) {
+    const generation = projectGeneration;
     const body = prompt ?? {
       positive_points: studio.regionPositivePoints,
       negative_points: studio.regionNegativePoints,
@@ -307,16 +381,19 @@ export const api = {
     studio.regionPredicting = true;
     try {
       const j = await jpost("/api/segmentation/predict", body);
+      if (!isCurrentProject(generation)) return null;
       studio.regionDraftMask = j.mask_png;
       studio.regionDraftBbox = j.bbox_px ?? null;
       studio.regionPositivePoints = j.positive_points ?? body.positive_points;
       studio.regionNegativePoints = j.negative_points ?? body.negative_points;
       return j;
     } catch (e) {
-      pushLog("Region prediction error: " + (e instanceof Error ? e.message : String(e)));
+      if (isCurrentProject(generation)) {
+        pushLog("Region prediction error: " + (e instanceof Error ? e.message : String(e)));
+      }
       return null;
     } finally {
-      studio.regionPredicting = false;
+      if (isCurrentProject(generation)) studio.regionPredicting = false;
     }
   },
 
@@ -464,9 +541,11 @@ export const api = {
     }
   },
 
-  async refreshVersions() {
+  async refreshVersions(generation = projectGeneration) {
     const j = await jget("/api/versions");
+    if (!isCurrentProject(generation)) return false;
     studio.versions = j.versions;
+    return true;
   },
 
   async saveVersion(name: string, notes: string) {

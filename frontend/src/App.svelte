@@ -24,17 +24,24 @@
 
   onMount(() => {
     let es: EventSource | null = null;
+    let disposed = false;
     void api.boot()
-      .then(() => {
+      .then((ready) => {
+        if (disposed || !ready) return;
         es = connectStream();
       })
       .catch((e) => {
+        if (disposed) return;
         studio.processing = false;
         studio.status = "Error";
         pushLog("Boot error: " + (e instanceof Error ? e.message : String(e)));
         console.error(e);
       });
-    return () => es?.close();
+    return () => {
+      disposed = true;
+      api.invalidateProjectWork();
+      es?.close();
+    };
   });
 
   function pickImage() {

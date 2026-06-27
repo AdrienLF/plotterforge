@@ -18,26 +18,45 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIsNotNone(match)
         body = match.group("body")
         self.assertIn("let es: EventSource | null = null", body)
-        self.assertRegex(
-            body,
-            r"void api\.boot\(\)\s*\.then\(\(\) => \{\s*es = connectStream\(\);\s*\}\)\s*\.catch",
-        )
+        self.assertIn("let disposed = false", body)
+        self.assertLess(body.index("api.boot()"), body.index("connectStream()"))
+        self.assertGreaterEqual(body.count("if (disposed"), 2)
         self.assertEqual(body.count("connectStream()"), 1)
         self.assertIn('pushLog("Boot error: "', body)
         self.assertIn('studio.status = "Error"', body)
         self.assertIn("studio.processing = false", body)
-        self.assertIn("return () => es?.close()", body)
+        cleanup = body[body.index("return () =>"):]
+        self.assertLess(cleanup.index("disposed = true"), cleanup.index("es?.close()"))
+        self.assertIn("api.invalidateProjectWork()", cleanup)
+        self.assertLess(cleanup.index("api.invalidateProjectWork()"), cleanup.index("es?.close()"))
 
-    def test_switch_project_resets_transient_state_before_boot(self):
+    def test_boot_uses_generation_guards_through_sequential_loads(self):
         api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
         match = re.search(
-            r"async switchProject\(payload: any\) \{(?P<body>.*?)\n  \},",
+            r"async boot\((?P<signature>.*?)\) \{(?P<body>.*?)\n  \},\n\n  applyProject",
             api_ts,
             re.DOTALL,
         )
 
         self.assertIsNotNone(match)
-        before_boot, separator, _ = match.group("body").partition("await this.boot();")
+        self.assertIn("generation", match.group("signature"))
+        body = match.group("body")
+        self.assertGreaterEqual(body.count("isCurrentProject(generation)"), 4)
+        self.assertIn("this.selectPfm(studio.pfmId, generation)", body)
+        self.assertIn("this.selectGenerator(studio.generatorId, generation)", body)
+        self.assertIn("this.refreshVersions(generation)", body)
+        self.assertIn("return true", body)
+
+    def test_switch_project_resets_transient_state_before_boot(self):
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+        match = re.search(
+            r"async switchProject\(payload: any(?P<signature>.*?)\) \{(?P<body>.*?)\n  \},",
+            api_ts,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(match)
+        before_boot, separator, _ = match.group("body").partition("await this.boot(")
         self.assertTrue(separator)
         self.assertIn("this.applyProject(payload)", before_boot)
         for reset in (
@@ -50,8 +69,62 @@ class FrontendContractsTest(unittest.TestCase):
             "studio.progress = 0",
             'studio.status = "Idle"',
             'studio.step = "composition"',
+            "studio.regionDraftMask = null",
+            "studio.regionDraftBbox = null",
+            "studio.regionPositivePoints = []",
+            "studio.regionNegativePoints = []",
+            "studio.regionSelecting = false",
+            "studio.regionPredicting = false",
+            "studio.maskMode = null",
+            "studio.maskEdit = false",
+            "studio.layerStyleOpen = false",
         ):
             self.assertIn(reset, before_boot)
+
+    def test_project_actions_invalidate_older_async_work_and_report_failures(self):
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+
+        self.assertIn("let projectGeneration = 0", api_ts)
+        self.assertIn("function beginProjectGeneration()", api_ts)
+        self.assertIn("function isCurrentProject(generation: number)", api_ts)
+        for method, next_method in (
+            ("newProject", "openProject"),
+            ("openProject", "renameProject"),
+            ("deleteProject", "applyComposition"),
+        ):
+            match = re.search(
+                rf"async {method}\(.*?\) \{{(?P<body>.*?)\n  \}},\n\n  (?:async )?{next_method}",
+                api_ts,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match)
+            self.assertIn("beginProjectGeneration()", match.group("body"))
+            self.assertIn("reportBootError", match.group("body"))
+
+        switch = re.search(
+            r"async switchProject\(.*?\) \{(?P<body>.*?)\n  \},\n\n  async newProject",
+            api_ts,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(switch)
+        self.assertIn("catch", switch.group("body"))
+        self.assertIn("reportBootError", switch.group("body"))
+        self.assertNotIn("throw", switch.group("body"))
+
+    def test_region_prediction_drops_results_from_an_old_project(self):
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+        match = re.search(
+            r"async predictRegion\(.*?\) \{(?P<body>.*?)\n  \},\n\n  async saveRegion",
+            api_ts,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        self.assertIn("const generation = projectGeneration", body)
+        result_guard = body.index("if (!isCurrentProject(generation)) return null")
+        self.assertLess(result_guard, body.index("studio.regionDraftMask = j.mask_png"))
+        self.assertIn("if (isCurrentProject(generation))", body[body.index("finally"):])
 
     def test_svg_upload_does_not_trigger_plot_estimate(self):
         api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
