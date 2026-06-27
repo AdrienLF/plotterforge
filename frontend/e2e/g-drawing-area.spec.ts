@@ -1,4 +1,6 @@
-import { test, expect, freshProject, gotoApp } from "./fixtures";
+import { test, expect, freshProject, gotoApp, ASSETS } from "./fixtures";
+import { readFileSync } from "fs";
+import { join } from "path";
 
 // G1: selecting a preset from the Drawing Area panel persists width/height.
 test("G1: area preset sets width and height via API", async ({ page, request, baseURL }) => {
@@ -36,4 +38,61 @@ test("G2: padding left input saves to area settings", async ({ page, request, ba
   await page.waitForTimeout(300);
   const { area } = await (await request.get(`${baseURL}/api/area`)).json();
   expect(area.pad_left).toBe(15);
+});
+
+// G3: pen width (mm) setting persists to the backend.
+test("G3: pen width input saves to area settings", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E G3");
+  await gotoApp(page);
+  await page.getByRole("button", { name: "Drawing Area" }).click();
+
+  // Pen width input is identified by its label text.
+  const pwLabel = page.locator('label', { hasText: "Pen width (mm)" });
+  // Its sibling input is right after the label inside the same .f container.
+  const pwInput = page.locator(".f").filter({ has: pwLabel }).locator("input");
+  await pwInput.fill("0.5");
+  await pwInput.press("Tab");
+
+  await page.waitForTimeout(300);
+  const { area } = await (await request.get(`${baseURL}/api/area`)).json();
+  expect(area.pen_width_mm).toBeCloseTo(0.5, 3);
+});
+
+// G4: clipping mode select persists to the backend.
+test("G4: clipping mode saves to area settings", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E G4");
+  await gotoApp(page);
+  await page.getByRole("button", { name: "Drawing Area" }).click();
+
+  // Clipping select has options drawing/page/none.
+  await page.locator('select:has(option[value="page"])').selectOption("page");
+
+  await page.waitForTimeout(300);
+  const { area } = await (await request.get(`${baseURL}/api/area`)).json();
+  expect(area.clipping).toBe("page");
+});
+
+// G5 (UX inventory): changing page preset after layers exist doesn't destroy layers.
+test("G5: switching page preset preserves existing layers", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E G5");
+  await request.post(`${baseURL}/api/image`, {
+    multipart: {
+      file: { name: "sample.png", mimeType: "image/png", buffer: readFileSync(join(ASSETS, "sample.png")) },
+    },
+  });
+  const add = await (await request.post(`${baseURL}/api/composition/add-layer`, { data: {} })).json();
+  const layerId: string = add.composition.layers.at(-1).id;
+  await request.post(`${baseURL}/api/composition/layers/${layerId}/pathfinding/generate`, {
+    data: { pfm_id: "spiral", params: {} },
+  });
+
+  await gotoApp(page);
+  await page.getByRole("button", { name: "Drawing Area" }).click();
+  await page.locator('select:has(option[value="A4"])').selectOption("A5");
+  await page.waitForTimeout(300);
+
+  // Layer count must not change after a preset switch.
+  const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+  expect(composition.layers.length).toBe(1);
+  expect(composition.layers[0].id).toBe(layerId);
 });
