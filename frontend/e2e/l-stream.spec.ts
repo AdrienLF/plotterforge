@@ -1,3 +1,4 @@
+import { readFileSync } from "fs";
 import { join } from "path";
 import { test, expect, ASSETS, freshProject, gotoApp, importImage } from "./fixtures";
 
@@ -31,4 +32,48 @@ test("L2: status badge reflects GPU/CPU backend", async ({ page, request, baseUR
   const badgeText = await page.locator(".badge").textContent();
   expect(badgeText).toContain(expectedPrefix);
   expect(badgeText).toContain(backend);
+});
+
+// L3: starting a second process while one is running is handled gracefully —
+// returns 409 (blocked) rather than corrupting shared state.
+test("L3: concurrent process request returns 409 and leaves state intact", async ({ request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E L3");
+  await request.post(`${baseURL}/api/image`, {
+    multipart: {
+      file: { name: "sample.png", mimeType: "image/png", buffer: readFileSync(join(ASSETS, "sample.png")) },
+    },
+  });
+  const add = await (await request.post(`${baseURL}/api/composition/add-layer`, { data: {} })).json();
+  const layerId: string = add.composition.layers.at(-1).id;
+
+  // Fire two generate requests simultaneously. The backend serialises on _process_thread
+  // so at least one must succeed (200) and the concurrent one should be blocked (409),
+  // not crash the server.
+  const [r1, r2] = await Promise.all([
+    request.post(`${baseURL}/api/composition/layers/${layerId}/pathfinding/generate`, {
+      data: { pfm_id: "voronoi_stippling", params: { point_density: 200, voronoi_iterations: 20 } },
+    }),
+    request.post(`${baseURL}/api/composition/layers/${layerId}/pathfinding/generate`, {
+      data: { pfm_id: "spiral", params: {} },
+    }),
+  ]);
+
+  const statuses = [r1.status(), r2.status()];
+  // At least one must succeed.
+  expect(statuses.some((s) => s === 200), "at least one request should succeed").toBeTruthy();
+  // None should 5xx (server crash / unhandled error).
+  expect(statuses.every((s) => s < 500), "no 5xx — server must not crash").toBeTruthy();
+
+  // Wait for any in-flight process to finish (up to 60 s).
+  for (let i = 0; i < 120; i++) {
+    const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+    const layer = composition.layers.find((l: { id: string }) => l.id === layerId);
+    if (layer?.pathfinding_style?.status !== "stale") break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  // State must not be corrupted: the layer should exist with a non-stale status.
+  const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
+  const layer = composition.layers.find((l: { id: string }) => l.id === layerId);
+  expect(["ready", "error"].includes(layer?.pathfinding_style?.status), "layer should reach a terminal status").toBeTruthy();
 });

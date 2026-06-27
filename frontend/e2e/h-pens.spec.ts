@@ -1,4 +1,5 @@
-import { test, expect, freshProject, gotoApp } from "./fixtures";
+import { join } from "path";
+import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding } from "./fixtures";
 
 // H1: selecting a library from the dropdown populates the pen list.
 test("H1: load pen library populates the pen list", async ({ page, request, baseURL }) => {
@@ -44,4 +45,32 @@ test("H3: distribution type select is saved on change", async ({ page, request, 
   // Verify the value persisted to the backend.
   const { drawing_set } = await (await request.get(`${baseURL}/api/pens`)).json();
   expect(drawing_set.distribution_type).toBe("even");
+});
+
+// H4: distribution order select persists.
+test("H4: distribution order select saves to backend", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E H4");
+  await gotoApp(page);
+
+  // The order select has options darkest/lightest/displayed/reversed.
+  await page.locator('select:has(option[value="darkest"])').selectOption("lightest");
+
+  const { drawing_set } = await (await request.get(`${baseURL}/api/pens`)).json();
+  expect(drawing_set.distribution_order).toBe("lightest");
+});
+
+// H5: usage % on each pen reflects geometry from the last run.
+// After a run with studio.stats set, at least one pen shows > 0 % usage.
+test("H5: pen usage % is non-zero after a pathfinding run", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E H5");
+  await gotoApp(page);
+  await importImage(page, join(ASSETS, "sample.png"));
+  await runPathFinding(page);
+
+  // After runPathFinding the SSE done event sets studio.stats including per_pen counts.
+  // The single default pen should have 100 % of the shapes.
+  const firstPct = page.locator(".pen .pct").first();
+  const pctText = await firstPct.textContent();
+  const pct = parseInt(pctText ?? "0", 10);
+  expect(pct, "usage % should be > 0 after a run").toBeGreaterThan(0);
 });
