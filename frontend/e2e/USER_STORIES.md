@@ -7,9 +7,8 @@ A library of user stories that drive the Playwright e2e tests. They serve three 
 3. **UI/UX** — give a concrete inventory of real flows to rethink the interface against.
 
 Each story is tagged with its primary goal: **[R]** regression, **[P]** performance, **[U]** UX.
-Story IDs map to spec files (one spec file per epic, e.g. `c-pathfinding.spec.ts`). The 2–3
-representative specs that ship with the harness are noted at the bottom; the rest are written
-in a follow-up pass.
+Story IDs map to spec files (one spec file per epic, e.g. `c-pathfinding.spec.ts`). Current
+coverage and the intentionally deferred backlog are recorded at the bottom.
 
 Testing decisions:
 - **Plotter:** mock serial + estimate-only (`PLOTTER_FAKE_SERIAL=1`). No real motion.
@@ -145,15 +144,18 @@ Testing decisions:
 
 ---
 
-## Implemented now (representative specs)
+## Coverage status
 
-These three ship with the harness to prove it runs end-to-end:
+The Playwright suite contains 84 tests covering 74 of the 86 story IDs above. Data-driven C7/C8 cases account for multiple tests under a single story ID.
 
-| Spec | Stories |
-|------|---------|
-| `smoke.spec.ts` | A1 + B1 + C2 |
-| `plot-estimate.spec.ts` | K1 + K5 |
-| `perf-pfm.spec.ts` | C9 (3-PFM subset) |
+### Deferred stories
 
-The remaining stories are written in a follow-up pass, one spec file per epic, so IDs map
-directly to tests (`a-projects.spec.ts`, `c-pathfinding.spec.ts`, …).
+- **D1-D6:** SAM2 region creation, confinement, inversion, deletion, latency, and editing UX.
+- **F6:** Composition masks.
+- **F8:** Alignment toolbar behavior.
+- **F9:** On-canvas snapping.
+- **F10:** Handle-versus-input UX benchmark.
+- **H6:** Many-pen readability inventory.
+- **K10:** Plot-panel action hierarchy inventory.
+
+These are backlog items, not implied coverage. A story moves out of this list only when its named Playwright test runs in the complete suite.

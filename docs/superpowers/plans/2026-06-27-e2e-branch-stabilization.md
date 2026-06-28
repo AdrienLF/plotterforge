@@ -706,22 +706,22 @@ git commit -m "test: align generator journeys with manual-first flow"
 
 - [ ] **Step 1: Replace the stale README layout claim**
 
-Replace the statement that only three representative specs ship with:
+Replace the stale README layout coverage claim with:
 
 ```markdown
-The suite currently contains 16 spec files and 82 serial Chromium tests covering 74 of the 86 catalogued story IDs. Specs combine direct API setup with real UI interactions so expensive setup stays fast while user-visible behavior remains end-to-end.
+The suite currently contains 17 spec files and 84 serial Chromium tests covering 74 of the 86 catalogued story IDs. Specs combine direct API setup with real UI interactions so expensive setup stays fast while user-visible behavior remains end-to-end.
 
 Twelve story IDs are intentionally deferred: D1-D6, F6, F8-F10, H6, and K10. See `USER_STORIES.md` for their requirements.
 ```
 
-- [ ] **Step 2: Replace `Implemented now (representative specs)` in `USER_STORIES.md`**
+- [ ] **Step 2: Replace the stale coverage section in `USER_STORIES.md`**
 
 Use this coverage section:
 
 ```markdown
 ## Coverage status
 
-The Playwright suite contains 82 tests covering 74 of the 86 story IDs above. Data-driven C7/C8 cases account for multiple tests under a single story ID.
+The Playwright suite contains 84 tests covering 74 of the 86 story IDs above. Data-driven C7/C8 cases account for multiple tests under a single story ID.
 
 ### Deferred stories
 
@@ -782,13 +782,13 @@ npm run e2e
 Set-Location ..
 ```
 
-Expected: `82 passed`, `0 failed`, `0 flaky`, `0 skipped`.
+Expected: `84 passed`, `0 failed`, `0 flaky`, `0 skipped`.
 
 - [ ] **Step 3: Repeat the complete Playwright suite**
 
 Run the same `npm run e2e` command again.
 
-Expected: a second independent `82 passed` result. Any intermittent failure blocks completion and returns to the failing spec's condition boundary.
+Expected: a second independent `84 passed` result. Any intermittent failure blocks completion and returns to the failing spec's condition boundary.
 
 - [ ] **Step 4: Inspect generated artifacts and repository state**
 
