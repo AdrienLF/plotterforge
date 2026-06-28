@@ -22,6 +22,7 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn('page.off("requestfailed", onRequestFailed)', body)
         self.assertIn("attempt < 2", body)
         self.assertIn("isTransientBootFailure", body)
+        self.assertIn("hasText: /^Boot error:/", fixtures)
         self.assertIn('log === "Boot error: Failed to fetch"', fixtures)
         self.assertIn('failure.url.includes("/api/")', fixtures)
         self.assertIn("page.reload({", body)

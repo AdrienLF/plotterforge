@@ -19,7 +19,7 @@ type BootRequestFailure = { url: string; error: string };
 
 function isTransientBootFailure(log: string, failures: BootRequestFailure[]) {
   return (
-    log === "Boot error: Failed to fetch" &&
+    log.endsWith("Boot error: Failed to fetch") &&
     failures.some((failure) => failure.url.includes("/api/"))
   );
 }
@@ -50,7 +50,7 @@ async function runBootAttempt(
 
   const bootError = page
     .locator(".status .log")
-    .filter({ hasText: /^Boot error:/ });
+    .filter({ hasText: "Boot error:" });
   const failed = bootError
     .waitFor({ state: "visible", timeout: BOOT_ATTEMPT_TIMEOUT })
     .then(
