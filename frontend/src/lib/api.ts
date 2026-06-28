@@ -368,6 +368,14 @@ export const api = {
     studio.selectedRegionId = id || null;
   },
 
+  async setSamModel(model: string) {
+    try {
+      studio.segmentationStatus = await jpost("/api/segmentation/model", { model });
+    } catch (e) {
+      pushLog("SAM model error: " + (e instanceof Error ? e.message : String(e)));
+    }
+  },
+
   async predictRegion(prompt?: SegmentationPromptT) {
     const generation = projectGeneration;
     const body = prompt ?? {

@@ -170,6 +170,19 @@
               <button class="danger-text" onclick={deleteRegion}>Delete</button>
             {/if}
           </div>
+          {#if studio.segmentationStatus?.models?.length}
+            <label class="sam-model">
+              <span>SAM model</span>
+              <select
+                value={studio.segmentationStatus.model}
+                onchange={(e) => api.setSamModel((e.target as HTMLSelectElement).value)}
+              >
+                {#each studio.segmentationStatus.models as m (m)}
+                  <option value={m}>{m.replace("sam2.1_hiera_", "")}</option>
+                {/each}
+              </select>
+            </label>
+          {/if}
           {#if studio.regionSelecting}
             <div class="region-save">
               <input aria-label="Region name" bind:value={regionName} placeholder="Region name" />

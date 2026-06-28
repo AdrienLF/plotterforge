@@ -8,6 +8,7 @@ A running list of what this software does. One line each. Updated on every commi
 
 ## Regions (segmentation)
 - **AI segmentation** — Click-to-segment the source image into regions (`/api/segmentation/predict`).
+- **SAM model picker** — Choose the SAM 2.1 variant (tiny/small/base_plus/large); auto-downloads the checkpoint, choice persisted in settings.
 - **Region management** — Create, rename, delete, and select regions; each carries its own mask.
 - **Region masks** — Per-region alpha mask applied to the source for isolated path finding.
 

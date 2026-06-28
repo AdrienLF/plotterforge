@@ -99,6 +99,7 @@ DEFAULTS = {
     'copies':          1,
     'page_delay':      15,
     'curve_step_mm':   0.5,
+    'sam_model':       'sam2.1_hiera_tiny',
 }
 
 def load_cfg():
@@ -291,25 +292,49 @@ class LocalSam2Adapter:
     import time.
     """
 
-    CHECKPOINT_URL = 'https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt'
+    CHECKPOINT_BASE_URL = 'https://dl.fbaipublicfiles.com/segment_anything_2/092824/'
+    # model id -> SAM 2 hydra config. Checkpoint file is f'{model}.pt'.
+    MODELS = {
+        'sam2.1_hiera_tiny':      'configs/sam2.1/sam2.1_hiera_t.yaml',
+        'sam2.1_hiera_small':     'configs/sam2.1/sam2.1_hiera_s.yaml',
+        'sam2.1_hiera_base_plus': 'configs/sam2.1/sam2.1_hiera_b+.yaml',
+        'sam2.1_hiera_large':     'configs/sam2.1/sam2.1_hiera_l.yaml',
+    }
     PACKAGE_URL = 'git+https://github.com/facebookresearch/sam2.git'
 
     def __init__(self, checkpoint=None, config=None, model=None):
         self._predictor = None
         self._error = None
         self.setup_state = 'idle'
-        self.model = model or os.environ.get('SAM2_MODEL', 'sam2.1_hiera_tiny')
-        self.checkpoint = checkpoint or os.environ.get(
-            'SAM2_CHECKPOINT',
-            str(project_mod.WORKSPACE / 'models' / 'sam2.1_hiera_tiny.pt'),
-        )
-        self.config = config or os.environ.get(
-            'SAM2_CONFIG',
-            'configs/sam2.1/sam2.1_hiera_t.yaml',
-        )
-        self.checkpoint_url = os.environ.get('SAM2_CHECKPOINT_URL', self.CHECKPOINT_URL)
+        model = model or cfg.get('sam_model') or os.environ.get('SAM2_MODEL') or 'sam2.1_hiera_tiny'
+        # Explicit checkpoint/config (constructor or env) pin paths and skip the
+        # registry — power-user escape hatch kept from the original adapter.
+        self._pin_checkpoint = checkpoint or os.environ.get('SAM2_CHECKPOINT')
+        self._pin_config = config or os.environ.get('SAM2_CONFIG')
         self.package_url = os.environ.get('SAM2_PACKAGE_URL', self.PACKAGE_URL)
         self.auto_setup = os.environ.get('SAM2_AUTO_SETUP', '1') not in ('0', 'false', 'False')
+        self._apply_model(model if model in self.MODELS else 'sam2.1_hiera_tiny')
+
+    def _apply_model(self, model):
+        self.model = model
+        self.config = self._pin_config or self.MODELS[model]
+        self.checkpoint = self._pin_checkpoint or str(
+            project_mod.WORKSPACE / 'models' / f'{model}.pt')
+        self.checkpoint_url = os.environ.get(
+            'SAM2_CHECKPOINT_URL', self.CHECKPOINT_BASE_URL + f'{model}.pt')
+
+    def set_model(self, model):
+        if model not in self.MODELS:
+            raise ValueError(f'Unknown SAM model {model!r}')
+        if model == self.model:
+            return
+        # An explicit UI choice overrides any env/constructor pin.
+        self._pin_checkpoint = None
+        self._pin_config = None
+        self._predictor = None
+        self._error = None
+        self.setup_state = 'idle'
+        self._apply_model(model)
 
     def _has_module(self, name):
         import importlib.util
@@ -399,7 +424,8 @@ class LocalSam2Adapter:
 
     def status(self):
         if self._predictor is not None:
-            return {'available': True, 'backend': 'sam2', 'model': self.model, 'setup_state': 'ready'}
+            return {'available': True, 'backend': 'sam2', 'model': self.model,
+                    'models': list(self.MODELS), 'setup_state': 'ready'}
         try:
             self._ensure_setup()
             has_sam = self._has_module('sam2')
@@ -425,6 +451,7 @@ class LocalSam2Adapter:
             'available': available,
             'backend': 'sam2',
             'model': self.model,
+            'models': list(self.MODELS),
             'checkpoint': self.checkpoint,
             'setup_state': 'ready' if available else self.setup_state,
             'auto_setup': self.auto_setup,
@@ -2069,6 +2096,17 @@ def api_source_image():
 @app.route('/api/segmentation/status')
 def api_segmentation_status():
     return jsonify(_get_segmentation_adapter().status())
+
+@app.route('/api/segmentation/model', methods=['POST'])
+def api_segmentation_model():
+    adapter = _get_segmentation_adapter()
+    try:
+        adapter.set_model((request.json or {}).get('model'))
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    cfg['sam_model'] = adapter.model
+    save_cfg(cfg)
+    return jsonify(adapter.status())
 
 @app.route('/api/segmentation/predict', methods=['POST'])
 def api_segmentation_predict():
