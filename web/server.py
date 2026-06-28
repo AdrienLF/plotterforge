@@ -125,7 +125,8 @@ _stop_event  = threading.Event()
 _subscribers = set()
 _subscribers_lock = threading.Lock()
 _last_events = {}
-_current_svg = None   # bytes
+_current_svg = None   # bytes (the composed SVG; may be stale — see _composition_dirty)
+_composition_dirty = True  # recompose _current_svg lazily, on demand
 _placement   = {'x': 0.0, 'y': 0.0}  # mm offset from page top-left
 
 # ── Studio state (image → PFM → drawing) ───────────────────────────────────────
@@ -184,13 +185,29 @@ def _composed_svg_bytes():
         return None
     return compose_visible_svg(_composition()).encode()
 
-def _sync_current_svg_from_composition():
-    global _current_svg, _placement
+def _recompose_current_svg():
+    global _current_svg, _placement, _composition_dirty
     composed = _composed_svg_bytes()
     if composed is not None:
         _current_svg = composed
         _placement = {'x': 0.0, 'y': 0.0}
+    _composition_dirty = False
     return composed
+
+def _ensure_current_svg():
+    """Recompose only if a mutation has marked the composition dirty."""
+    if _composition_dirty:
+        _recompose_current_svg()
+    return _current_svg
+
+def _sync_current_svg_from_composition():
+    # ponytail: just flag dirty (O(1)). The heavy recompose — parse + serialize
+    # every path, plus occlusion line-clipping — is deferred to whoever actually
+    # needs the composed SVG (plot / estimate / export) instead of running on
+    # every layer toggle, show/hide, or nudge.
+    global _composition_dirty
+    _composition_dirty = True
+    return None
 
 def _replace_selected_composition_layer(svg, name, kind, source):
     layer = replace_selected_layer(
@@ -201,7 +218,7 @@ def _replace_selected_composition_layer(svg, name, kind, source):
         source=source,
     )
     _project.save_composition_layers()
-    _sync_current_svg_from_composition()
+    _recompose_current_svg()  # workers read _current_svg right after — recompose now
     return layer
 
 def _set_workflow_layer(svg, name, kind, source):
@@ -222,7 +239,7 @@ def _set_workflow_layer(svg, name, kind, source):
     else:
         layer = comp.add_layer(svg, name=name, kind=kind, source=source)
     _project.save_composition_layers()
-    _sync_current_svg_from_composition()
+    _recompose_current_svg()  # workers read _current_svg right after — recompose now
     return layer
 
 def _composition_payload():
@@ -1609,7 +1626,7 @@ def placement_route():
 
 @app.route('/api/plot/estimate')
 def plot_estimate():
-    _sync_current_svg_from_composition()
+    _ensure_current_svg()
     if _current_svg is None:
         return jsonify(error='No SVG loaded'), 400
     try:
@@ -1629,7 +1646,7 @@ def plot_job_route():
 def plot():
     global _plot_thread, _stop_event
     with _operation_lock:
-        _sync_current_svg_from_composition()
+        _ensure_current_svg()
         if _current_svg is None:
             return jsonify(error='No SVG loaded'), 400
         if _plot_thread and _plot_thread.is_alive():
@@ -2552,6 +2569,7 @@ def api_export():
                          as_attachment=True, download_name='plot.svg')
     if _drawing is None:
         # generator output (or uploaded SVG): export the current SVG as-is
+        _ensure_current_svg()
         if _current_svg is not None:
             return send_file(io.BytesIO(_current_svg), mimetype='image/svg+xml',
                              as_attachment=True, download_name='plot.svg')
