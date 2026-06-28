@@ -775,7 +775,7 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
         if on_progress:
             on_progress(idx, total_el)
         if respect_stop and _stop_event.is_set():
-            break
+            raise RuntimeError('__stopped__')
 
         # True circles become a single native G2 arc at plot time. Keep a polygon
         # of points for travel ordering / estimation / resume accounting, and tag
