@@ -30,7 +30,7 @@ test("I2: load version restores drawing and re-runs path finding", async ({ page
   await expect(page.locator(".ver .name", { hasText: "Restore Me" })).toBeVisible({ timeout: 10_000 });
 
   // Load it via the 👁 button — this re-runs path finding.
-  await page.locator(".ver", { hasText: "Restore Me" }).getByRole("button", { name: "Load" }).click();
+  await page.locator(".ver", { hasText: "Restore Me" }).locator('button[title="Load"]').click();
   // Re-run must complete before the test ends.
   await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
   // The log should mention "Loaded version".
@@ -58,12 +58,12 @@ test("I3: rate, reorder, and delete versions", async ({ page, request, baseURL }
 
   // Move V2 (top) down so V1 moves to top.
   const v2Row = page.locator(".ver", { hasText: "V2" });
-  await v2Row.getByRole("button", { name: "Down" }).click();
+  await v2Row.locator('button[title="Down"]').click();
   // V1 should now be first.
   await expect(page.locator(".ver").first()).toContainText("V1", { timeout: 5_000 });
 
   // Delete V2.
-  await v2Row.getByRole("button", { name: "Delete" }).click();
+  await v2Row.locator('button[title="Delete"]').click();
   await expect(page.locator(".ver", { hasText: "V2" })).not.toBeVisible({ timeout: 5_000 });
   await expect(page.locator(".ver", { hasText: "V1" })).toBeVisible();
 });

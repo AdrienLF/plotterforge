@@ -38,7 +38,7 @@ test("F1: layer ↑/↓ buttons reorder the layer list", async ({ page, request,
   await expect(layers.nth(1)).toContainText("Layer A");
 
   // Click ↓ on Layer B (top slot) to move it below A.
-  await page.locator(".layer", { hasText: "Layer B" }).getByRole("button", { name: "Move down" }).click();
+  await page.locator(".layer", { hasText: "Layer B" }).locator('button[title="Move down"]').click();
 
   // Order should now be A on top, B below.
   await expect(layers.first()).toContainText("Layer A", { timeout: 10_000 });
@@ -73,13 +73,14 @@ test("F7: duplicate and delete layer", async ({ page, request, baseURL }) => {
   const before = await page.locator(".layer").count();
 
   // Duplicate the layer.
-  await page.locator(".layer").first().getByRole("button", { name: "Duplicate" }).click();
+  await page.locator(".layer").first().locator('button[title="Duplicate"]').click();
   await expect(page.locator(".layer")).toHaveCount(before + 1, { timeout: 10_000 });
   // The copy's name ends with " copy".
-  await expect(page.locator(".layer").first()).toContainText("copy");
+  const copy = page.locator(".layer").filter({ hasText: "copy" }).first();
+  await expect(copy).toContainText("copy");
 
   // Delete the copy.
-  await page.locator(".layer").first().getByRole("button", { name: "Delete" }).click();
+  await copy.locator('button[title="Delete"]').click();
   await expect(page.locator(".layer")).toHaveCount(before, { timeout: 10_000 });
   await expect(page.locator(".layer").first()).not.toContainText("copy");
 });

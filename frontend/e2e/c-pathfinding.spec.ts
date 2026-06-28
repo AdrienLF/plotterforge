@@ -95,13 +95,15 @@ async function openLayerEditor(request: any, page: any, baseURL: string, name: s
     },
   });
   const add = await (await request.post(`${baseURL}/api/composition/add-layer`, { data: {} })).json();
-  const layerId: string = add.composition.layers.at(-1).id;
+  const layer = add.composition.layers.at(-1);
+  if (!layer) throw new Error("Expected the composition to contain the newly added layer");
+  const layerId: string = layer.id;
   await request.post(`${baseURL}/api/composition/layers/${layerId}/pathfinding/generate`, {
     data: { pfm_id: "voronoi_stippling", params: {} },
   });
   await gotoApp(page);
-  // Open the LayerStylePanel by clicking the layer's "Edit" button.
-  await page.locator(".layer").first().getByRole("button", { name: "Edit" }).click();
+  // Open the LayerStylePanel using the layer's accessible action name.
+  await page.getByRole("button", { name: `Open ${layer.name} path finding` }).click();
   await expect(page.locator('[aria-label="Layer style"]')).toBeVisible({ timeout: 5_000 });
   return layerId;
 }

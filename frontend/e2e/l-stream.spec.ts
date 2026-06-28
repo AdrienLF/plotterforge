@@ -29,7 +29,7 @@ test("L2: status badge reflects GPU/CPU backend", async ({ page, request, baseUR
   const { backend } = await (await request.get(`${baseURL}/api/pfm/list`)).json();
   const expectedPrefix = backend.startsWith("torch") ? "GPU" : "CPU";
 
-  const badgeText = await page.locator(".badge").textContent();
+  const badgeText = await page.locator(".status .badge").textContent();
   expect(badgeText).toContain(expectedPrefix);
   expect(badgeText).toContain(backend);
 });
@@ -97,5 +97,5 @@ test("L3: concurrent process request returns 409 and leaves state intact", async
   // State must not be corrupted: the layer should exist with a non-stale status.
   const { composition } = await (await request.get(`${baseURL}/api/composition`)).json();
   const layer = composition.layers.find((l: { id: string }) => l.id === layerId);
-  expect(["ready", "error"].includes(layer?.pathfinding_style?.status), "layer should reach a terminal status").toBeTruthy();
+  expect(["clean", "error"].includes(layer?.pathfinding_style?.status), "layer should reach a terminal status").toBeTruthy();
 });

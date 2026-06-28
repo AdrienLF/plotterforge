@@ -1,6 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding, gotoStep, waitForReady } from "./fixtures";
+import { test, expect, ASSETS, DRAWING_SHAPE, freshProject, gotoApp, importImage, runPathFinding, gotoStep, waitForReady } from "./fixtures";
 
 // M1 [R+P]: Import → 2 PF layers (different algorithms) → load pens → export SVG.
 // Skips the SAM2 region step (D-epic, gated on model availability).
@@ -44,7 +44,7 @@ test("M1: multi-layer artwork — import, 2 PF layers, pens, export SVG", async 
   const svg = await r.text();
   expect(svg).toMatch(/^<svg\s/);
   // Combined export must contain at least one drawn shape from the layers.
-  expect(svg).toMatch(/<(path|line|polyline|circle)\b/);
+  expect(svg).toMatch(DRAWING_SHAPE);
 });
 
 // M2 [R]: Generator-only artwork — generate → save version → export SVG.

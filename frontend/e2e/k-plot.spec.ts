@@ -131,7 +131,7 @@ test("K9: nearest-neighbour reorder estimate latency", async ({ request, baseURL
   const t1 = Date.now();
   const est = await (await request.get(`${baseURL}/api/plot/estimate`)).json();
   const nearest_ms = Date.now() - t1;
-  expect(est.total_shapes, "estimate should report shapes").toBeGreaterThan(0);
+  expect(est.paths, "estimate should report paths").toBeGreaterThan(0);
 
   recordPerf({ story: "K9", duration_ms: nearest_ms });
   const budget = 10_000;
