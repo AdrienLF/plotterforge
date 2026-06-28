@@ -157,9 +157,25 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("studio.plotEstimate = null", snapshot_branch)
         self.assertIn("studio.plotProgress = null", snapshot_branch)
         self.assertIn("studio.previewSvg = null", snapshot_branch)
+        self.assertIn("const restoredLayer = studio.selectedLayer", snapshot_branch)
+        self.assertIn("restoredLayer.source?.generator_id", snapshot_branch)
+        self.assertIn("const previousAutoRedraw = studio.autoRedraw", snapshot_branch)
+        self.assertIn("studio.autoRedraw = false", snapshot_branch)
+        self.assertIn("await this.selectGenerator(generatorId)", snapshot_branch)
+        self.assertIn("studio.genSchema.map((param) => [param.name, param.default])", snapshot_branch)
+        self.assertIn("...(restoredLayer.source.params ?? {})", snapshot_branch)
+        self.assertIn("studio.autoRedraw = previousAutoRedraw", snapshot_branch)
         self.assertNotIn("this.process()", snapshot_branch)
         self.assertIn("await this.process()", legacy_branch)
         self.assertIn('pushLog("Loaded version")', body)
+
+        generator_panel = (ROOT / "frontend/src/components/panels/GeneratePanel.svelte").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("function paramsKey", generator_panel)
+        self.assertIn("const paramsJson = paramsKey(studio.genParams)", generator_panel)
+        self.assertIn("selectedSource.generator_id === generatorId", generator_panel)
+        self.assertIn("paramsKey(selectedSource.params ?? {}) === paramsJson", generator_panel)
 
     def test_export_menu_uses_visible_layers_not_stats(self):
         menu = (ROOT / "frontend/src/components/MenuBar.svelte").read_text(encoding="utf-8")

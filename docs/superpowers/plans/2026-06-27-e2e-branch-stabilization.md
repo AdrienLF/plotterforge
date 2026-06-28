@@ -520,7 +520,7 @@ Expected: all 11 tests pass.
 Run:
 
 ```powershell
-npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts:134 e2e/m-journey.spec.ts:65 e2e/m-journey.spec.ts:130 e2e/plot-estimate.spec.ts --reporter=list
+npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts:134 e2e/m-journey.spec.ts:65 e2e/m-journey.spec.ts:136 e2e/plot-estimate.spec.ts --reporter=list
 ```
 
 Expected before corrections: generator journeys that wait for implicit output time out because opening Generate is intentionally manual-first, E3 does not exercise Auto on an existing generate layer, E5's in-place count assertion can pass before its click, F5 reads `crop: null` while the successful crop request is still running, and M2 waits for output it never starts. The plot journeys pass in isolation and are included here to verify that project/worker isolation also fixes their full-suite contamination.
@@ -669,7 +669,7 @@ After clicking Reset, poll until the same layer's crop is null.
 
 - [ ] **Step 4: Synchronize M2 and plot metrics**
 
-Use the exact accessible selector `getByRole("button", { name: "✦ Generate", exact: true })` for every generator action so the `▾Generate` panel-title button cannot also match. In M2, explicitly click that action, wait for `waitForGeneratedLayer(request, baseURL!)`, then wait for UI `Ready` so the SSE `done` event has populated stats. Save the version and capture its layer ID/SVG, mutate `rot1_x` until the same layer changes, then load the saved row by its `Load` title. Poll until the original ID/SVG is restored, assert UI `Ready`, and verify Save is disabled because snapshot load cleared stale stats before exporting.
+Use the exact accessible selector `getByRole("button", { name: "✦ Generate", exact: true })` for every generator action so the `▾Generate` panel-title button cannot also match. In M2, explicitly click that action, wait for `waitForGeneratedLayer(request, baseURL!)`, then wait for UI `Ready` so the SSE `done` event has populated stats. Save the version and capture its layer ID/SVG, mutate `rot1_x` until the same layer changes, then load the saved row by its `Load` title. Poll until the original ID/SVG is restored, assert the `rot1_x` control is hydrated back to the saved default `0`, assert UI `Ready`, and verify Save is disabled because snapshot load cleared stale stats before exporting. Hydrate generator ID/schema/params with Auto temporarily suppressed, then restore Auto behind a source-parameter equality guard so loading cannot enqueue a no-op redraw.
 
 The focused M2 run exposed that generator output has no legacy `Drawing`, so version saving must persist the visible composition instead. Cover this with backend regressions: store a real PNG thumbnail plus an immutable `versions/<id>/composition.json` snapshot, keep only that relative path in `project.json`, restore and recompose the snapshot on load, and leave legacy drawing versions on their existing regenerate-on-load path. Validate a snapshot before mutating project/server state and return 409 for missing or corrupt data. Thumbnail parsing must explicitly ignore plot cancellation without clearing the shared stop event. Empty projects must still return 400. On frontend snapshot load, clear preview/stats/plot-derived state, settle at non-processing `Ready`, and skip legacy reprocessing.
 
@@ -709,7 +709,7 @@ Also run `uv run python -m pytest tests/test_versions.py -q` and the focused M2 
 ```powershell
 git add frontend/e2e
 git add docs/superpowers/plans/2026-06-27-e2e-branch-stabilization.md
-git commit -m "fix: harden generator version snapshots"
+git commit -m "fix: restore generator controls with snapshots"
 ```
 
 ### Task 6: Correct E2E coverage documentation

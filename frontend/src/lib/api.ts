@@ -632,6 +632,22 @@ export const api = {
     pushLog("Loaded version");
     if (j.composition) {
       this.applyComposition(j);
+      const restoredLayer = studio.selectedLayer;
+      if (restoredLayer?.kind === "generate" && restoredLayer.source?.generator_id) {
+        const generatorId = restoredLayer.source.generator_id;
+        const previousAutoRedraw = studio.autoRedraw;
+        studio.autoRedraw = false;
+        try {
+          if (await this.selectGenerator(generatorId)) {
+            const defaults = Object.fromEntries(
+              studio.genSchema.map((param) => [param.name, param.default]),
+            );
+            studio.genParams = { ...defaults, ...(restoredLayer.source.params ?? {}) };
+          }
+        } finally {
+          studio.autoRedraw = previousAutoRedraw;
+        }
+      }
       studio.previewSvg = null;
       studio.stats = null;
       studio.plotEstimate = null;

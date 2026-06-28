@@ -24,6 +24,12 @@
     else await api.selectLayer(value);
   }
 
+  function paramsKey(params: Record<string, any>) {
+    return JSON.stringify(
+      Object.entries(params).sort(([left], [right]) => left.localeCompare(right)),
+    );
+  }
+
   // Auto-redraw: regenerate (debounced) when a parameter or the generator
   // changes — but only for a layer that's already a generate layer. Opening the
   // panel does nothing; the explicit ✦ Generate button creates the first
@@ -31,14 +37,20 @@
   let timer: ReturnType<typeof setTimeout>;
   let mounted = false;
   $effect(() => {
-    JSON.stringify(studio.genParams); // track every parameter
-    studio.generatorId;
+    const paramsJson = paramsKey(studio.genParams); // track every parameter
+    const generatorId = studio.generatorId;
     studio.autoRedraw;
     clearTimeout(timer);
     if (!mounted) { mounted = true; return; } // don't fire just from opening the step
     if (!studio.autoRedraw) return;
     // Never spawn a generate layer implicitly — only redraw an existing one.
-    if (untrack(() => studio.selectedLayer?.kind) !== "generate") return;
+    const selectedLayer = untrack(() => studio.selectedLayer);
+    if (selectedLayer?.kind !== "generate") return;
+    const selectedSource = selectedLayer.source ?? {};
+    if (
+      selectedSource.generator_id === generatorId &&
+      paramsKey(selectedSource.params ?? {}) === paramsJson
+    ) return;
     timer = setTimeout(() => {
       if (!studio.processing) void api.generate();
     }, 350);

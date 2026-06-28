@@ -114,6 +114,12 @@ test("M2: generator-only artwork — generate, version, export", async ({ page, 
     "wait for generator composition snapshot restore",
     60_000,
   );
+  await expect
+    .poll(
+      async () => Number(await rot1xInput.inputValue()),
+      { message: "wait for restored generator controls", timeout: 10_000 },
+    )
+    .toBe(0);
   await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
   await expect(saveVersion).toBeDisabled();
 
