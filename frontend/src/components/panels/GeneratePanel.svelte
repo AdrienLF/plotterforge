@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { studio } from "../../lib/state.svelte";
   import { api } from "../../lib/api";
   import ParamControl from "../ParamControl.svelte";
@@ -23,16 +24,21 @@
     else await api.selectLayer(value);
   }
 
-  // Auto-redraw: regenerate (debounced) on entering the step and whenever a
-  // parameter changes. The panel only mounts on the Generate step, so the
-  // initial run gives an immediate first draw.
+  // Auto-redraw: regenerate (debounced) when a parameter or the generator
+  // changes — but only for a layer that's already a generate layer. Opening the
+  // panel does nothing; the explicit ✦ Generate button creates the first
+  // generate layer, after which tweaks redraw it live.
   let timer: ReturnType<typeof setTimeout>;
+  let mounted = false;
   $effect(() => {
     JSON.stringify(studio.genParams); // track every parameter
     studio.generatorId;
     studio.autoRedraw;
     clearTimeout(timer);
+    if (!mounted) { mounted = true; return; } // don't fire just from opening the step
     if (!studio.autoRedraw) return;
+    // Never spawn a generate layer implicitly — only redraw an existing one.
+    if (untrack(() => studio.selectedLayer?.kind) !== "generate") return;
     timer = setTimeout(() => {
       if (!studio.processing) void api.generate();
     }, 350);

@@ -247,6 +247,15 @@
     return `/api/composition/layers/${layer.id}/raster?v=${encodeURIComponent(String(stamp))}`;
   }
 
+  // ponytail: render the path preview as one rasterized <img> instead of injecting
+  // thousands of live <path> DOM nodes. The browser rasterizes the SVG once, so
+  // pan/zoom just composites a bitmap (GPU) instead of re-painting every path per
+  // frame. Resolution is the layout size; zooming in blurs like any raster — the
+  // explicit trade for a usable viewport.
+  function layerPathsUrl(layer: CompositionLayerT) {
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(layer.svg)}`;
+  }
+
   // ── Mask drawing ──────────────────────────────────────────────────────────
   type Pt = { x: number; y: number };
   type Anchor = { x: number; y: number; hx: number; hy: number };
@@ -743,7 +752,7 @@
                 <img class="layer-raster" src={layerRasterUrl(layer)} alt="" />
               {/if}
               {#if layerShowsPaths(layer)}
-                {@html layer.svg}
+                <img class="layer-paths" src={layerPathsUrl(layer)} alt="" />
               {/if}
               {#if occluders.length}
                 <svg
@@ -1093,6 +1102,15 @@
   .svgwrap :global(svg) {
     width: 100%;
     height: 100%;
+    display: block;
+  }
+  .layer-paths {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    pointer-events: none;
     display: block;
   }
   .source-frame {
