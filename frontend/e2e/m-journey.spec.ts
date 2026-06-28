@@ -64,10 +64,12 @@ test("M2: generator-only artwork — generate, version, export", async ({ page, 
   await freshProject(request, baseURL!, "E2E M2");
   await gotoApp(page);
 
-  // Jump to Generate step and auto-generate spokes_and_circles.
+  // Jump to Generate and explicitly run the default spokes_and_circles generator.
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Generate" }).click();
   await waitForGeneratedLayer(request, baseURL!);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 
   // Versions panel is collapsed by default in the Generate step — open it.
   await page.getByRole("button", { name: "Versions" }).click();

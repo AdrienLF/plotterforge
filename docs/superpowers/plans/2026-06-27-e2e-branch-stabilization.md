@@ -508,40 +508,74 @@ Expected: all 11 tests pass.
 - Modify: `frontend/e2e/f-composition.spec.ts`
 - Modify: `frontend/e2e/m-journey.spec.ts`
 - Modify: `frontend/e2e/plot-estimate.spec.ts`
-- Modify: `frontend/e2e/fixtures.ts`
 
 - [ ] **Step 1: Verify asynchronous-flow failures are RED**
 
 Run:
 
 ```powershell
-npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts:133 e2e/m-journey.spec.ts:51 e2e/m-journey.spec.ts:78 e2e/plot-estimate.spec.ts --reporter=list
+npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts:134 e2e/m-journey.spec.ts:63 e2e/m-journey.spec.ts:94 e2e/plot-estimate.spec.ts --reporter=list
 ```
 
-Expected before corrections: E3-E5, F5, and M2 fail. F5 specifically reads `crop: null` while the successful crop request is still running. The plot journeys pass in isolation and are included here to verify that project/worker isolation also fixes their full-suite contamination.
+Expected before corrections: generator journeys that wait for implicit output time out because opening Generate is intentionally manual-first, E3 does not exercise Auto on an existing generate layer, E5's in-place count assertion can pass before its click, F5 reads `crop: null` while the successful crop request is still running, and M2 waits for output it never starts. The plot journeys pass in isolation and are included here to verify that project/worker isolation also fixes their full-suite contamination.
 
-- [ ] **Step 2: Wait for real generator output instead of a possibly stale `Ready` label**
+- [ ] **Step 2: Start generation explicitly and wait for observable backend transitions**
 
 Import `DRAWING_SHAPE`, `getComposition`, `waitForComposition`, and `waitForGeneratedLayer` in `e-generator.spec.ts`.
 
-For E2/E4/E5/E6, replace the initial `Ready` wait with:
+Opening Generate never creates a layer. For E2, E4, E5, and E6, click Generate before waiting for the initial backend output:
 
 ```typescript
-const initial = await waitForGeneratedLayer(request, baseURL!);
-```
-
-At the end of E7, call `await waitForGeneratedLayer(request, baseURL!)` so the auto-generation worker cannot leak into E5.
-
-For E3, preserve the debounce-negative assertion and verify the backend remains empty before explicit generation:
-
-```typescript
-await page.waitForTimeout(600);
-expect((await getComposition(request, baseURL!)).layers).toHaveLength(0);
 await page.getByRole("button", { name: "Generate" }).click();
-await waitForGeneratedLayer(request, baseURL!);
+const initial = await waitForGeneratedLayer(request, baseURL!);
+await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 ```
 
-For E4, poll each SVG transition:
+E2 asserts that the explicit default generation contains `DRAWING_SHAPE`. E6 starts its timer before entering Generate, explicitly clicks Generate, and includes both backend generation and the resulting UI `Ready` state in its timing. E7 only checks panel grouping and must not wait for output because it does not start a worker.
+
+For E3, explicitly create the first generate layer and capture its ID and SVG. With Auto checked, change `rot1_x` and poll until that same layer has the changed `source.params.rot1_x` and a different SVG. Wait for UI `Ready` before the next interaction. Then disable Auto, change `rot1_x` again, preserve the 600 ms debounce-negative window, and assert that the persisted SVG and source params are unchanged. Finally, click Generate and poll until the same layer reflects the pending param and changed SVG:
+
+```typescript
+await page.getByRole("button", { name: "Generate" }).click();
+const initial = await waitForGeneratedLayer(request, baseURL!);
+const layerId = initial.layers[0].id;
+const initialSvg = initial.layers[0].svg;
+
+await rot1xInput.fill("45");
+await rot1xInput.press("Tab");
+const autoRedrawn = await waitForComposition(
+  request,
+  baseURL!,
+  (composition) => {
+    const layer = composition.layers.find((candidate) => candidate.id === layerId);
+    return layer?.source?.params?.rot1_x === 45 && layer.svg !== initialSvg;
+  },
+  "wait for debounced auto redraw",
+  60_000,
+);
+const autoSvg = autoRedrawn.layers.find((layer) => layer.id === layerId)!.svg;
+
+await autoCheck.uncheck();
+await rot1xInput.fill("15");
+await rot1xInput.press("Tab");
+await page.waitForTimeout(600);
+expect((await getComposition(request, baseURL!)).layers.find((layer) => layer.id === layerId)?.svg)
+  .toBe(autoSvg);
+
+await page.getByRole("button", { name: "Generate" }).click();
+await waitForComposition(
+  request,
+  baseURL!,
+  (composition) => {
+    const layer = composition.layers.find((candidate) => candidate.id === layerId);
+    return layer?.source?.params?.rot1_x === 15 && layer.svg !== autoSvg;
+  },
+  "wait for explicit redraw with Auto off",
+  60_000,
+);
+```
+
+For E4, explicitly generate the initial layer, wait for UI `Ready`, then poll each SVG transition. Wait for UI `Ready` after each backend transition before changing the next parameter:
 
 ```typescript
 const svg1: string = initial.layers[0].svg;
@@ -552,7 +586,10 @@ await rot1xInput.press("Tab");
 const changed = await waitForComposition(
   request,
   baseURL!,
-  (composition) => composition.layers[0]?.svg && composition.layers[0].svg !== svg1,
+  (composition) => {
+    const svg = composition.layers[0]?.svg ?? "";
+    return svg.length > 0 && svg !== svg1;
+  },
   "wait for rot1_x regeneration",
   60_000,
 );
@@ -570,7 +607,7 @@ const reverted = await waitForComposition(
 expect(reverted.layers[0].svg).toBe(svg1);
 ```
 
-For E5, poll layer counts in the backend after each generate instead of sleeping or reading the DOM immediately:
+For E5, explicitly generate the initial layer. After choosing `__new__`, wait until the backend selection is null before clicking Generate. Creating a new target completes only when the backend transitions from one layer to two; then wait for UI `Ready` before selecting the original target. For the in-place case, select the original ID and wait until the backend confirms that selection, disable Auto, capture its SVG and the stable set of two layer IDs, change `rot1_x`, and verify after 600 ms that no redraw occurred. Click Generate and poll until the same original ID has the new source param and changed SVG while both layer IDs remain stable:
 
 ```typescript
 const first = await waitForComposition(
@@ -581,12 +618,29 @@ const first = await waitForComposition(
   60_000,
 );
 const firstLayerId: string = first.layers[0].id;
-// After selecting __new__ and clicking Generate:
-await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
+// After selecting __new__:
+await waitForComposition(request, baseURL!, (composition) => composition.selected_layer_id === null, "wait for new-layer target selection", 10_000);
+// After clicking Generate:
 await waitForComposition(request, baseURL!, (composition) => composition.layers.length === 2, "wait for second generator layer", 60_000);
-// After selecting firstLayerId and clicking Generate:
 await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
-await waitForComposition(request, baseURL!, (composition) => composition.layers.length === 2, "wait for in-place generator update", 60_000);
+
+// After selecting firstLayerId, disabling Auto, capturing originalSvg/stableLayerIds,
+// changing rot1_x to 60, and proving the backend is still unchanged:
+await page.getByRole("button", { name: "Generate" }).click();
+await waitForComposition(
+  request,
+  baseURL!,
+  (composition) => {
+    const layer = composition.layers.find((candidate) => candidate.id === firstLayerId);
+    const ids = composition.layers.map((candidate) => candidate.id).sort();
+    return composition.layers.length === 2
+      && ids.every((id, index) => id === stableLayerIds[index])
+      && layer?.source?.params?.rot1_x === 60
+      && layer.svg !== originalSvg;
+  },
+  "wait for observable in-place generator update",
+  60_000,
+);
 ```
 
 - [ ] **Step 3: Poll crop completion**
@@ -609,7 +663,7 @@ After clicking Reset, poll until the same layer's crop is null.
 
 - [ ] **Step 4: Synchronize M2 and plot metrics**
 
-In M2, replace the status-only wait with `await waitForGeneratedLayer(request, baseURL!)`, then assert the Save button is enabled before clicking it.
+In M2, explicitly click Generate, wait for `waitForGeneratedLayer(request, baseURL!)`, then wait for UI `Ready` so the SSE `done` event has populated stats. Assert the Save button is enabled before clicking it.
 
 In M3 and `plot-estimate.spec.ts`, wait for the estimate API and UI metric together:
 
@@ -634,13 +688,14 @@ Run:
 npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts e2e/m-journey.spec.ts e2e/plot-estimate.spec.ts --reporter=list
 ```
 
-Expected: all tests in the four files pass, including the uncommitted E7 test.
+Expected: all tests in the four files pass, including the E7 grouping test.
 
 - [ ] **Step 6: Commit the E2E stabilization**
 
 ```powershell
 git add frontend/e2e
-git commit -m "test: stabilize Playwright journeys and contracts"
+git add docs/superpowers/plans/2026-06-27-e2e-branch-stabilization.md
+git commit -m "test: align generator journeys with manual-first flow"
 ```
 
 ### Task 6: Correct E2E coverage documentation

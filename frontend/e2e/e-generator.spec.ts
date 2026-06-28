@@ -22,40 +22,77 @@ test("E1: ＋ Generator button navigates to the Generate step", async ({ page, r
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
 });
 
-// E2: default generator (spokes_and_circles) auto-generates when Auto is on.
-test("E2: Auto-redraw generates on Generate step entry", async ({ page, request, baseURL }) => {
+// E2: the default generator (spokes_and_circles) generates on explicit request.
+test("E2: default generator produces drawing geometry", async ({ page, request, baseURL }) => {
   await freshProject(request, baseURL!, "E2E E2");
   await gotoApp(page);
 
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
 
-  // Auto is true by default; debounce fires after 350ms.
+  await page.getByRole("button", { name: "Generate" }).click();
   const initial = await waitForGeneratedLayer(request, baseURL!);
   expect(initial.layers[0]?.svg).toMatch(DRAWING_SHAPE);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 });
 
-// E3: unchecking Auto suppresses auto-redraw; explicit Generate still works.
-test("E3: Auto off suppresses auto-redraw; explicit Generate triggers generation", async ({ page, request, baseURL }) => {
+// E3: Auto redraws an existing generate layer; disabling it requires an explicit Generate.
+test("E3: Auto redraws an existing layer and Auto off requires explicit generation", async ({ page, request, baseURL }) => {
   await freshProject(request, baseURL!, "E2E E3");
   await gotoApp(page);
 
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
 
-  // Uncheck Auto before the 350ms debounce fires.
+  await page.getByRole("button", { name: "Generate" }).click();
+  const initial = await waitForGeneratedLayer(request, baseURL!);
+  const layerId = initial.layers[0].id;
+  const initialSvg = initial.layers[0].svg;
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
+
   const autoCheck = page.locator("label.auto input[type='checkbox']");
   await expect(autoCheck).toBeChecked();
+  const rot1xInput = page.locator('.ctrl:has(label[for="rot1_x"]) input.numbox');
+
+  // Auto redraw updates the already-selected generate layer after the debounce.
+  await rot1xInput.fill("45");
+  await rot1xInput.press("Tab");
+  const autoRedrawn = await waitForComposition(
+    request,
+    baseURL!,
+    (composition) => {
+      const layer = composition.layers.find((candidate) => candidate.id === layerId);
+      return layer?.source?.params?.rot1_x === 45 && layer.svg !== initialSvg;
+    },
+    "wait for debounced auto redraw",
+    60_000,
+  );
+  const autoSvg = autoRedrawn.layers.find((layer) => layer.id === layerId)!.svg;
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
+
+  // With Auto off, changing a parameter does not update the persisted layer.
   await autoCheck.uncheck();
-
-  // Wait longer than the debounce; status should remain Idle.
+  await rot1xInput.fill("15");
+  await rot1xInput.press("Tab");
   await page.waitForTimeout(600);
-  await expect(page.locator(".status .state")).toHaveText("Idle");
-  expect((await getComposition(request, baseURL!)).layers).toHaveLength(0);
+  const unchanged = (await getComposition(request, baseURL!)).layers.find((layer) => layer.id === layerId)!;
+  expect(unchanged.svg, "Auto off should preserve the current SVG").toBe(autoSvg);
+  expect(unchanged.source.params.rot1_x, "Auto off should preserve persisted params").toBe(45);
 
-  // Explicit click → generation completes.
+  // Explicit generation applies the pending parameter to that same layer.
   await page.getByRole("button", { name: "Generate" }).click();
-  await waitForGeneratedLayer(request, baseURL!);
+  const explicitlyRedrawn = await waitForComposition(
+    request,
+    baseURL!,
+    (composition) => {
+      const layer = composition.layers.find((candidate) => candidate.id === layerId);
+      return layer?.source?.params?.rot1_x === 15 && layer.svg !== autoSvg;
+    },
+    "wait for explicit redraw with Auto off",
+    60_000,
+  );
+  expect(explicitlyRedrawn.layers.find((layer) => layer.id === layerId)?.id).toBe(layerId);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 });
 
 // E4: changing a framework knob (rot1_x) visibly alters output; same params → same SVG (determinism).
@@ -65,9 +102,11 @@ test("E4: rot1_x knob changes output; reverting produces the same SVG (determini
 
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Generate" }).click();
   const initial = await waitForGeneratedLayer(request, baseURL!);
   const svg1: string = initial.layers[0]?.svg ?? "";
   expect(svg1, "initial generate must produce geometry").toMatch(DRAWING_SHAPE);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 
   // Change rot1_x (3D Rotation group) — auto-redraw fires after 350ms debounce.
   const rot1xInput = page.locator('.ctrl:has(label[for="rot1_x"]) input.numbox');
@@ -85,6 +124,7 @@ test("E4: rot1_x knob changes output; reverting produces the same SVG (determini
   );
   const svg2: string = changed.layers[0]?.svg ?? "";
   expect(svg2, "rot1_x=45 should produce different geometry").not.toBe(svg1);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 
   // Revert rot1_x to 0 → same params as the initial run → deterministic output.
   await rot1xInput.fill("0");
@@ -98,6 +138,7 @@ test("E4: rot1_x knob changes output; reverting produces the same SVG (determini
   );
   const svg3: string = reverted.layers[0]?.svg ?? "";
   expect(svg3, "same params + same seed must produce the same SVG").toBe(svg1);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 });
 
 // E6 [P]: generate timing — spokes_and_circles with defaults should finish within soft budget.
@@ -108,7 +149,9 @@ test("E6: spokes_and_circles generate timing", async ({ page, request, baseURL, 
   const t0 = Date.now();
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Generate" }).click();
   await waitForGeneratedLayer(request, baseURL!);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
   const duration_ms = Date.now() - t0;
 
   recordPerf({ story: "E6", duration_ms });
@@ -132,7 +175,6 @@ test("E7: generator params are organized into named groups", async ({ page, requ
   console.log(`[ux] E7: ${groupCount} param groups in GeneratePanel`);
   // The framework alone has ~10+ groups (Decimate, Transform, 3D Rotation, Distort 1/2, …).
   expect(groupCount, "should have multiple groups for scannability").toBeGreaterThanOrEqual(3);
-  await waitForGeneratedLayer(request, baseURL!);
 });
 
 // E5: the target selector generates into a new layer or updates an existing one in place.
@@ -142,6 +184,7 @@ test("E5: target selector — new layer vs existing layer", async ({ page, reque
 
   await page.getByRole("button", { name: "＋ Generator" }).click();
   await expect(page.locator(".gen-select")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "Generate" }).click();
   const initial = await waitForComposition(
     request,
     baseURL!,
@@ -150,30 +193,74 @@ test("E5: target selector — new layer vs existing layer", async ({ page, reque
     60_000,
   );
   const firstLayerId: string = initial.layers[0].id;
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 
   // "＋ New layer" calls api.newLayer() which clears the selection (selected_layer_id = null).
   // Generating with no selection adds a brand-new layer.
   const targetSelect = page.locator("label.target select");
   await targetSelect.selectOption("__new__");
-  await page.getByRole("button", { name: "Generate" }).click();
-  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
   await waitForComposition(
+    request,
+    baseURL!,
+    (composition) => composition.selected_layer_id === null,
+    "wait for new-layer target selection",
+    10_000,
+  );
+  await page.getByRole("button", { name: "Generate" }).click();
+  const withNewLayer = await waitForComposition(
     request,
     baseURL!,
     (composition) => composition.layers.length === 2,
     "wait for generation into a new layer",
     60_000,
   );
-
-  // Select the original layer → generate replaces it in place (no new layer created).
-  await targetSelect.selectOption(firstLayerId);
-  await page.getByRole("button", { name: "Generate" }).click();
   await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
-  await waitForComposition(
+
+  // Select the original layer and disable Auto so the parameter change stays pending.
+  await targetSelect.selectOption(firstLayerId);
+  const selected = await waitForComposition(
     request,
     baseURL!,
-    (composition) => composition.layers.length === 2,
-    "wait for in-place generation to preserve layer count",
+    (composition) => composition.selected_layer_id === firstLayerId,
+    "wait for original target selection",
+    10_000,
+  );
+  const autoCheck = page.locator("label.auto input[type='checkbox']");
+  await expect(autoCheck).toBeChecked();
+  await autoCheck.uncheck();
+
+  const originalLayer = selected.layers.find((layer) => layer.id === firstLayerId)!;
+  const originalSvg = originalLayer.svg;
+  const stableLayerIds = withNewLayer.layers.map((layer) => layer.id).sort();
+  const rot1xInput = page.locator('.ctrl:has(label[for="rot1_x"]) input.numbox');
+  await rot1xInput.fill("60");
+  await rot1xInput.press("Tab");
+  await page.waitForTimeout(600);
+  const beforeExplicit = (await getComposition(request, baseURL!)).layers.find(
+    (layer) => layer.id === firstLayerId,
+  )!;
+  expect(beforeExplicit.svg, "Auto off should not regenerate the selected target").toBe(originalSvg);
+  expect(beforeExplicit.source.params.rot1_x).not.toBe(60);
+
+  // Generate replaces the original layer in place while preserving both layer IDs.
+  await page.getByRole("button", { name: "Generate" }).click();
+  const updated = await waitForComposition(
+    request,
+    baseURL!,
+    (composition) => {
+      const layer = composition.layers.find((candidate) => candidate.id === firstLayerId);
+      const ids = composition.layers.map((candidate) => candidate.id).sort();
+      return (
+        composition.layers.length === 2 &&
+        ids.every((id, index) => id === stableLayerIds[index]) &&
+        layer?.source?.params?.rot1_x === 60 &&
+        layer.svg !== originalSvg
+      );
+    },
+    "wait for observable in-place generator update",
     60_000,
   );
+  expect(updated.layers).toHaveLength(2);
+  expect(updated.layers.map((layer) => layer.id).sort()).toEqual(stableLayerIds);
+  await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 });
