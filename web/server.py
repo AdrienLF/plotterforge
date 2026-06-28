@@ -22,6 +22,7 @@ from engine.composition import compose_visible_svg, layer_svg_zip, parse_svg_siz
 from engine.regions import mask_bbox
 from engine import project as project_mod
 from engine.project import Project, get_or_create
+from engine.versioning import render_polyline_thumbnail
 
 app = Flask(__name__)
 
@@ -2502,11 +2503,24 @@ def api_pen_library(name):
 @app.route('/api/versions', methods=['GET', 'POST'])
 def api_versions():
     if request.method == 'POST':
-        if _drawing is None:
-            return jsonify(error='Nothing to save — process a drawing first'), 400
         data = request.json or {}
-        v = _project.add_version(_drawing, name=data.get('name', ''),
-                                 notes=data.get('notes', ''))
+        if _drawing is not None:
+            v = _project.add_version(_drawing, name=data.get('name', ''),
+                                     notes=data.get('notes', ''))
+        else:
+            svg = _ensure_current_svg() if _composition_has_visible_layers() else None
+            if svg is None:
+                return jsonify(error='Nothing to save — process a drawing first'), 400
+            polylines = svg_to_polylines(svg, {**cfg, 'reordering': 'none'})
+            if not polylines:
+                return jsonify(error='Nothing to save — process a drawing first'), 400
+            thumbnail = render_polyline_thumbnail(polylines)
+            v = _project.add_version(
+                None,
+                name=data.get('name', ''),
+                notes=data.get('notes', ''),
+                thumbnail=thumbnail,
+            )
         return jsonify(ok=True, version=v.to_dict())
     return jsonify(versions=[v.to_dict() for v in _project.versions])
 
@@ -2530,13 +2544,22 @@ def api_version(vid):
 
 @app.route('/api/versions/<vid>/load', methods=['POST'])
 def api_version_load(vid):
+    global _drawing
+    version = _project.get_version(vid)
+    if not version:
+        return jsonify(error='Unknown version'), 404
     if not _project.load_version(vid):
         return jsonify(error='Unknown version'), 404
     p = get_pfm(_project.pfm_id)
-    return jsonify(ok=True, pfm_id=_project.pfm_id,
+    payload = dict(ok=True, pfm_id=_project.pfm_id,
                    params=_project.params, schema=schema_json(p.params),
                    area=_project.area.to_dict(),
                    drawing_set=_project.drawing_set.to_dict())
+    if version.composition_snapshot:
+        _drawing = None
+        _recompose_current_svg()
+        payload['composition'] = _composition_payload()
+    return jsonify(payload)
 
 @app.route('/api/versions/<vid>/move', methods=['POST'])
 def api_version_move(vid):

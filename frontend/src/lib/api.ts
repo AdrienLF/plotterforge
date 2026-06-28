@@ -630,7 +630,14 @@ export const api = {
     studio.area = j.area;
     studio.drawingSet = j.drawing_set;
     pushLog("Loaded version");
-    await this.process();
+    if (j.composition) {
+      this.applyComposition(j);
+      studio.processing = false;
+      studio.progress = 1;
+      studio.status = "Ready";
+    } else {
+      await this.process();
+    }
   },
 
   exportUrl(split = false) {

@@ -29,6 +29,7 @@ class Version:
     notes: str = ""
     timestamp: float = field(default_factory=time.time)
     thumbnail: str = ""          # filename relative to the version dir
+    composition_snapshot: str = ""  # optional JSON filename relative to project dir
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +44,7 @@ class Version:
             "notes": self.notes,
             "timestamp": self.timestamp,
             "thumbnail": self.thumbnail,
+            "composition_snapshot": self.composition_snapshot,
         }
 
     @classmethod
@@ -71,3 +73,35 @@ def render_thumbnail(drawing: Drawing, max_px: int = 260) -> Image.Image:
             if len(pts) >= 2:
                 draw.line(pts, fill=colour, width=1)
     return im
+
+
+def render_polyline_thumbnail(polylines, max_px: int = 260) -> Image.Image:
+    """Render real-coordinate polylines into a normalized PNG preview."""
+    points = [point for polyline in polylines for point in polyline]
+    if not points:
+        raise ValueError("Cannot render an empty polyline thumbnail")
+
+    min_x = min(point[0] for point in points)
+    max_x = max(point[0] for point in points)
+    min_y = min(point[1] for point in points)
+    max_y = max(point[1] for point in points)
+    width = max(max_x - min_x, 1.0)
+    height = max(max_y - min_y, 1.0)
+    margin = min(8, max_px // 4)
+    scale = max(1.0, max_px - 2 * margin) / max(width, height)
+    image_width = max(1, int(round(width * scale)) + 2 * margin)
+    image_height = max(1, int(round(height * scale)) + 2 * margin)
+    image = Image.new("RGB", (image_width, image_height), "#ffffff")
+    draw = ImageDraw.Draw(image)
+    for polyline in polylines:
+        if len(polyline) < 2:
+            continue
+        normalized = [
+            (
+                margin + (point[0] - min_x) * scale,
+                margin + (max_y - point[1]) * scale,
+            )
+            for point in polyline
+        ]
+        draw.line(normalized, fill="#000000", width=1)
+    return image

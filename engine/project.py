@@ -234,13 +234,29 @@ class Project:
         return None
 
     # ── versions ─────────────────────────────────────────────────────────────
-    def add_version(self, drawing: Drawing, name: str = "", notes: str = "") -> Version:
+    def add_version(
+        self,
+        drawing: Drawing | None,
+        name: str = "",
+        notes: str = "",
+        *,
+        thumbnail: Image.Image | None = None,
+    ) -> Version:
         self.ensure_dirs()
         vid = uuid.uuid4().hex[:8]
         vdir = self.versions_dir / vid
         vdir.mkdir(parents=True, exist_ok=True)
-        thumb = render_thumbnail(drawing)
+        if drawing is None and thumbnail is None:
+            raise ValueError("A drawing or thumbnail is required")
+        thumb = thumbnail if thumbnail is not None else render_thumbnail(drawing)
         thumb.save(vdir / "thumb.png")
+        composition_snapshot = ""
+        if drawing is None:
+            composition_snapshot = f"versions/{vid}/composition.json"
+            (self.dir / composition_snapshot).write_text(
+                json.dumps(self.composition.to_dict(include_svg=True), indent=2),
+                encoding="utf-8",
+            )
         v = Version(
             id=vid,
             name=name or self.pfm_id.replace("_", " ").title(),
@@ -251,6 +267,7 @@ class Project:
             image_name=self.image_name,
             notes=notes,
             thumbnail=f"versions/{vid}/thumb.png",
+            composition_snapshot=composition_snapshot,
         )
         self.versions.insert(0, v)
         self.save()
@@ -268,7 +285,14 @@ class Project:
         self.params = dict(v.params)
         self.area = DrawingArea.from_dict(v.area)
         self.drawing_set = DrawingSet.from_dict(v.drawing_set)
-        self.save()
+        if v.composition_snapshot:
+            snapshot = json.loads(
+                (self.dir / v.composition_snapshot).read_text(encoding="utf-8")
+            )
+            self.composition = Composition.from_dict(snapshot)
+            self.save_composition_layers()
+        else:
+            self.save()
         return True
 
     def delete_version(self, vid: str) -> bool:

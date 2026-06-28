@@ -137,6 +137,26 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertNotIn("refreshEstimate", match.group("body"))
 
+    def test_version_load_applies_composition_snapshot_without_reprocessing(self):
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+        match = re.search(
+            r"async loadVersion\(.*?\) \{(?P<body>.*?)\n  \},\n\n  exportUrl",
+            api_ts,
+            re.DOTALL,
+        )
+
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        self.assertIn("if (j.composition)", body)
+        snapshot_branch, separator, legacy_branch = body.partition("else")
+        self.assertTrue(separator)
+        self.assertIn("this.applyComposition(j)", snapshot_branch)
+        self.assertIn("studio.processing = false", snapshot_branch)
+        self.assertIn('studio.status = "Ready"', snapshot_branch)
+        self.assertNotIn("this.process()", snapshot_branch)
+        self.assertIn("await this.process()", legacy_branch)
+        self.assertIn('pushLog("Loaded version")', body)
+
     def test_export_menu_uses_visible_layers_not_stats(self):
         menu = (ROOT / "frontend/src/components/MenuBar.svelte").read_text(encoding="utf-8")
 

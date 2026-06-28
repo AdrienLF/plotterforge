@@ -185,7 +185,7 @@ uv run --with pytest python -m pytest tests/test_projects.py tests/test_event_st
 uv run --with pytest python -m pytest -q
 ```
 
-Expected: 9 focused project/event tests pass, then all 94 backend tests pass.
+Expected: 9 focused project/event tests pass, then all 100 backend tests pass.
 
 - [ ] **Step 5: Commit the backend lifecycle fix**
 
@@ -508,6 +508,12 @@ Expected: all 11 tests pass.
 - Modify: `frontend/e2e/f-composition.spec.ts`
 - Modify: `frontend/e2e/m-journey.spec.ts`
 - Modify: `frontend/e2e/plot-estimate.spec.ts`
+- Modify: `engine/versioning.py`
+- Modify: `engine/project.py`
+- Modify: `web/server.py`
+- Modify: `frontend/src/lib/api.ts`
+- Test: `tests/test_versions.py`
+- Test: `tests/test_frontend_contracts.py`
 
 - [ ] **Step 1: Verify asynchronous-flow failures are RED**
 
@@ -665,6 +671,8 @@ After clicking Reset, poll until the same layer's crop is null.
 
 Use the exact accessible selector `getByRole("button", { name: "✦ Generate", exact: true })` for every generator action so the `▾Generate` panel-title button cannot also match. In M2, explicitly click that action, wait for `waitForGeneratedLayer(request, baseURL!)`, then wait for UI `Ready` so the SSE `done` event has populated stats. Assert the Save button is enabled before clicking it.
 
+The focused M2 run exposed that generator output has no legacy `Drawing`, so version saving must persist the visible composition instead. Cover this with backend regressions: store a real PNG thumbnail plus an immutable `versions/<id>/composition.json` snapshot, keep only that relative path in `project.json`, restore and recompose the snapshot on load, and leave legacy drawing versions on their existing regenerate-on-load path. Empty projects must still return 400.
+
 In M3 and `plot-estimate.spec.ts`, install a listener for the UI's estimate response before navigating to Plot. Assert that response and its payload, then check the rendered metric. Do not issue a second estimate request from the test:
 
 ```typescript
@@ -694,12 +702,14 @@ npx playwright test e2e/e-generator.spec.ts e2e/f-composition.spec.ts e2e/m-jour
 
 Expected: all tests in the four files pass, including the E7 grouping test.
 
+Also run `uv run python -m pytest tests/test_versions.py -q` and the focused M2 journey. Expected: generator composition save/load tests pass and M2 completes generate → version save → export.
+
 - [ ] **Step 6: Commit the E2E stabilization**
 
 ```powershell
 git add frontend/e2e
 git add docs/superpowers/plans/2026-06-27-e2e-branch-stabilization.md
-git commit -m "test: fix full-suite Playwright contracts"
+git commit -m "fix: persist generator composition versions"
 ```
 
 ### Task 6: Correct E2E coverage documentation
@@ -782,7 +792,7 @@ npm run build
 Set-Location ..
 ```
 
-Expected: 94 backend tests pass; Svelte reports 0 errors; Vite exits 0.
+Expected: 100 backend tests pass; Svelte reports 0 errors; Vite exits 0.
 
 - [ ] **Step 2: Run the complete Playwright suite**
 
