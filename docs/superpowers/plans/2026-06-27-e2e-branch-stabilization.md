@@ -334,7 +334,7 @@ Expected: L2, E3, F1, F7, and H2 reproduce the startup/event/collection races or
 In `frontend/e2e/fixtures.ts`, export a namespace-tolerant shape regex and add the following helpers:
 
 ```typescript
-export const DRAWING_SHAPE = /<(?:[A-Za-z_][\w.-]*:)?(?:path|line|polyline|circle)\b/;
+export const DRAWING_SHAPE = /<(?:[A-Za-z_][\w.-]*:)?(?:path|line|polyline|circle)(?=[\s/>])/;
 
 export async function freshProject(request: APIRequestContext, baseURL: string, name: string) {
   await expect

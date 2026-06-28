@@ -7,7 +7,7 @@ import type { CompositionT } from "../src/lib/types";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const ASSETS = join(HERE, "assets");
 const PERF_FILE = join(HERE, "perf", "results.jsonl");
-export const DRAWING_SHAPE = /<(?:[A-Za-z_][\w.-]*:)?(?:path|line|polyline|circle)\b/;
+export const DRAWING_SHAPE = /<(?:[A-Za-z_][\w.-]*:)?(?:path|line|polyline|circle)(?=[\s/>])/;
 
 // ── App-level helpers ───────────────────────────────────────────────────────
 
