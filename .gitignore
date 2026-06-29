@@ -9,5 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
+# Local git worktrees
+.worktrees/
+
 # macOS
 .DS_Store
