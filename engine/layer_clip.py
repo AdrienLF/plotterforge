@@ -214,6 +214,16 @@ def mask_polygon(mask: dict) -> list[Point]:
     return []
 
 
+def _polygon_bbox(pts: list[Point]) -> tuple[float, float, float, float]:
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _bbox_disjoint(a, b) -> bool:
+    return a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1]
+
+
 def _crop_rect(crop: dict) -> tuple[float, float, float, float]:
     x = float(crop["x"])
     y = float(crop["y"])
@@ -267,7 +277,11 @@ def clipped_layer_body(
     """
     rect = _crop_rect(crop) if crop else None
     poly = mask_polygon(mask) if mask else None
+    poly_bb = _polygon_bbox(poly) if poly else None
     exclude_polys = [mask_polygon(m) for m in (exclude_masks or []) if m]
+    # (polygon, bbox) for each occluder, so a polyline whose bbox misses the
+    # occluder can be kept untouched without the O(segments x edges) clip.
+    exclude_data = [(p, _polygon_bbox(p)) for p in exclude_polys if p]
     drawables, _se = _drawables(svg)
     out: list[str] = []
     for el in drawables:
@@ -277,12 +291,22 @@ def clipped_layer_body(
             if rect is not None:
                 pieces = [sub for pl in pieces for sub in clip_polyline(pl, rect)]
             if poly:
-                pieces = [sub for pl in pieces for sub in clip_polyline_polygon(pl, poly)]
-            for exclude_poly in exclude_polys:
-                if exclude_poly:
-                    pieces = [
-                        sub for pl in pieces for sub in _clip_polyline_outside_polygon(pl, exclude_poly)
-                    ]
+                kept = []
+                for pl in pieces:
+                    # Disjoint from the inclusion mask's bbox => wholly outside.
+                    if _bbox_disjoint(_polygon_bbox(pl), poly_bb):
+                        continue
+                    kept.extend(clip_polyline_polygon(pl, poly))
+                pieces = kept
+            for exclude_poly, ebb in exclude_data:
+                kept = []
+                for pl in pieces:
+                    # Disjoint from the occluder's bbox => nothing to remove.
+                    if _bbox_disjoint(_polygon_bbox(pl), ebb):
+                        kept.append(pl)
+                    else:
+                        kept.extend(_clip_polyline_outside_polygon(pl, exclude_poly))
+                pieces = kept
             for sub in pieces:
                 if len(sub) < 2:
                     continue
