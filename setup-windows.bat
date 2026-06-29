@@ -17,6 +17,9 @@ echo [1/4] Installing managed Python 3.13...
 uv python install 3.13 || exit /b 1
 
 echo [2/4] Syncing locked CUDA + SAM2 environment...
+rem Two-phase: install build deps (setuptools/torch) before building sam-2,
+rem which is built without isolation against this environment.
+uv sync --locked --extra cuda --extra sam2 --no-install-package sam-2 || exit /b 1
 uv sync --locked --extra cuda --extra sam2 || exit /b 1
 
 echo [3/4] Building frontend...

@@ -13,6 +13,9 @@ echo "[1/4] Installing managed Python 3.13..."
 uv python install 3.13
 
 echo "[2/4] Syncing locked MPS + SAM2 environment..."
+# Two-phase: install build deps (setuptools/torch) before building sam-2,
+# which is built without isolation against this environment.
+uv sync --locked --extra mps --extra sam2 --no-install-package sam-2
 uv sync --locked --extra mps --extra sam2
 
 echo "[3/4] Building frontend..."
