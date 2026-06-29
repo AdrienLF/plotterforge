@@ -3,6 +3,7 @@
   import { studio } from "../../lib/state.svelte";
   import { api } from "../../lib/api";
   import ParamControl from "../ParamControl.svelte";
+  import ShapeFieldEditor from "../generate/ShapeFieldEditor.svelte";
 
   // group params by their `group` field, preserving order
   const groups = $derived.by(() => {
@@ -84,14 +85,18 @@
     </label>
   </div>
 
-  {#each groups as [group, params] (group)}
-    <div class="group">
-      <div class="group-title">{group}</div>
-      {#each params as p (p.name)}
-        <ParamControl param={p} bind:value={studio.genParams[p.name]} />
-      {/each}
-    </div>
-  {/each}
+  {#if studio.generatorEditor === "shape_field"}
+    <ShapeFieldEditor />
+  {:else}
+    {#each groups as [group, params] (group)}
+      <div class="group">
+        <div class="group-title">{group}</div>
+        {#each params as p (p.name)}
+          <ParamControl param={p} bind:value={studio.genParams[p.name]} />
+        {/each}
+      </div>
+    {/each}
+  {/if}
 </div>
 
 <style>

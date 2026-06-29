@@ -332,6 +332,38 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("async restoreGeneratorLayer", api)
         self.assertIn("await this.restoreGeneratorLayer(studio.selectedLayer)", api)
 
+    def test_shape_field_dedicated_editor_contract(self):
+        panel = (
+            ROOT / "frontend/src/components/panels/GeneratePanel.svelte"
+        ).read_text(encoding="utf-8")
+        editor_path = (
+            ROOT / "frontend/src/components/generate/ShapeFieldEditor.svelte"
+        )
+
+        self.assertIn(
+            'import ShapeFieldEditor from "../generate/ShapeFieldEditor.svelte"',
+            panel,
+        )
+        self.assertIn('studio.generatorEditor === "shape_field"', panel)
+        self.assertIn("<ShapeFieldEditor", panel)
+        self.assertTrue(editor_path.exists())
+        editor = editor_path.read_text(encoding="utf-8")
+        for operation in (
+            "setLayers",
+            "patchLayer",
+            "addLayer",
+            "duplicateLayer",
+            "removeLayer",
+            "moveLayer",
+        ):
+            self.assertIn(f"function {operation}", editor)
+        self.assertIn("shape_layers: layers", editor)
+        self.assertIn('class="shape-field-editor"', editor)
+        self.assertIn('class="shape-card"', editor)
+        self.assertIn('aria-label="Add shape"', editor)
+        for shape_type in ("polygon", "star", "diamond", "cross", "spiral", "wave"):
+            self.assertIn(f'layer.type === "{shape_type}"', editor)
+
 
 if __name__ == "__main__":
     unittest.main()
