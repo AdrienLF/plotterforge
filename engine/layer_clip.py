@@ -14,6 +14,7 @@ frontend's drawing space and ``parse_svg_size_mm``.
 from __future__ import annotations
 
 import math
+import re
 from xml.sax.saxutils import escape
 
 from .geometry import Point, _segment_polygon_ts, clip_polyline, clip_polyline_polygon, point_in_polygon
@@ -133,6 +134,41 @@ def _flatten_element(el) -> list[list[Point]]:
     return polylines
 
 
+_PATH_TOKEN = re.compile(r"[A-Za-z]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
+
+
+def _polygon_from_ml_path(d: str) -> list[Point] | None:
+    """Exact vertices of an absolute M/L(/Z) polygon, or None to fall back.
+
+    Region occlusion masks are emitted as absolute ``M x,y L x,y … Z`` polygons
+    (web/server.py), already corner-simplified. Take those vertices verbatim
+    instead of resampling. Anything else (curves, relative ops, H/V) returns
+    None so the caller resamples with svgelements.
+    """
+    tokens = _PATH_TOKEN.findall(d)
+    pts: list[Point] = []
+    cmd = None
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t.isalpha():
+            cmd = t
+            i += 1
+            if cmd in ("Z", "z"):
+                continue
+            if cmd not in ("M", "L"):
+                return None  # curves / relative / H / V — not a plain polygon
+            continue
+        if cmd not in ("M", "L"):
+            return None
+        try:
+            pts.append((float(tokens[i]), float(tokens[i + 1])))
+        except (IndexError, ValueError):
+            return None
+        i += 2
+    return pts if len(pts) >= 3 else None
+
+
 def mask_polygon(mask: dict) -> list[Point]:
     """Convert a mask shape (layer-local mm) to a closed polygon ring."""
     kind = mask.get("type")
@@ -154,10 +190,16 @@ def mask_polygon(mask: dict) -> list[Point]:
             for i in range(n)
         ]
     if kind == "path":
+        d = str(mask.get("d", ""))
+        # Fast path: a plain M/L polygon (the common region-mask case) is taken
+        # verbatim — no resampling, no rounded corners.
+        exact = _polygon_from_ml_path(d)
+        if exact is not None:
+            return exact
         # The mask ``d`` is authored directly in layer-local mm (no document
         # viewBox), so svgelements coordinates are already mm — no px scaling.
         se = _se()
-        path = se.Path(str(mask.get("d", "")))
+        path = se.Path(d)
         pts: list[Point] = []
         try:
             length = path.length()
