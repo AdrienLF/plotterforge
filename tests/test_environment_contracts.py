@@ -70,6 +70,32 @@ class SetupScriptContractTest(unittest.TestCase):
         self.assertNotIn("conda ", script.lower())
 
 
+class DocumentationContractTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    def test_readme_documents_setup_and_launch_scripts(self):
+        for token in (
+            "setup-windows.bat",
+            "setup-macos.command",
+            "start-studio.bat",
+            "start-studio.command",
+            "Python 3.13",
+            "SAM2",
+            "Conda is not used",
+        ):
+            self.assertIn(token, self.readme)
+
+    def test_readme_drops_old_gpu_extra_and_python_314(self):
+        for token in (
+            "uv sync --extra gpu",
+            "uv run --extra gpu",
+            "Python 3.14+",
+        ):
+            self.assertNotIn(token, self.readme)
+
+
 class E2EIsolationContractTest(unittest.TestCase):
     def test_e2e_backend_uses_an_isolated_locked_base_environment(self):
         setup = (ROOT / "frontend/e2e/global-setup.ts").read_text(encoding="utf-8")

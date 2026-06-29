@@ -13,10 +13,13 @@ driver). It offers a library of configurable **Path Finding Modules**, a
 Control** — with optional GPU acceleration.
 
 ```sh
-uv sync --extra gpu           # engine + web deps with Torch/MPS/CUDA
-cd frontend && npm install && npm run build   # builds the SPA into web/static/app
-cd .. && uv run --extra gpu python -m web.server  # serves UI + API; CPU fallback stays available
+# Windows:  setup-windows.bat      then  start-studio.bat
+# macOS:    ./setup-macos.command  then  ./start-studio.command
 ```
+
+Setup prepares everything once (locked PyTorch, SAM2, checkpoint, frontend); the
+launchers are offline and just start the prepared server. See **Full setup** and
+**Launch** below.
 
 For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
 `/api` to the Flask server).
@@ -25,28 +28,53 @@ For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
   Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus the
   ported Grid Halftone and Random Stipple. Every module's settings are
   auto-generated from a typed schema (`engine/params.py`).
-- **GPU-first:** launch commands use the `gpu` extra by default. `engine/accel.py`
-  uses Torch (Metal/MPS or CUDA) for the heavy nearest-site / weighted-centroid
-  stages when available, falling back to numpy/scipy only when GPU support is not
-  available. The status bar shows the active backend.
+- **GPU-first:** setup installs the platform PyTorch build (CUDA on Windows, MPS
+  on macOS). `engine/accel.py` uses Torch for the heavy nearest-site /
+  weighted-centroid stages when available, falling back to numpy/scipy only when
+  GPU support is not available. The status bar shows the active backend.
 - **Integration:** a module produces a `Drawing` → `engine/svg_io.py` writes a
   multi-layer mm SVG → the existing `_plot_worker` in `web/server.py` plots it,
   unchanged. Projects/versions are stored under `~/.plotter_studio/`.
 
 ## Requirements
 
-- Python 3.14+
+- Windows 10/11 with an NVIDIA GPU and current driver, or macOS with MPS-capable hardware
 - [uv](https://docs.astral.sh/uv/)
+- Node.js and npm
 
-## Installation
+Python 3.13 is installed and managed by uv. Conda is not used.
 
-```sh
-git clone <repo>
-cd raster-to-plotter-svg
-uv sync --extra gpu
-```
+## Full setup
 
-## Usage
+Windows: `setup-windows.bat`
+
+macOS: `./setup-macos.command`
+
+Full setup installs the platform PyTorch build, pinned SAM2, the default checkpoint,
+frontend dependencies, and verifies a real segmentation inference before succeeding.
+
+## Launch
+
+Windows: `start-studio.bat`
+
+macOS: `./start-studio.command`
+
+Launch is offline and never installs, syncs, builds, downloads, or kills processes.
+Rerun the platform setup script after dependency or frontend changes.
+
+## Recovery
+
+- **`uv` or Node.js not found** — install them, then rerun the platform setup script.
+- **`Run setup-windows.bat first.` / `Run ./setup-macos.command first.`** — the `.venv`
+  is missing or stale; rerun the platform setup script to rebuild it from the lock.
+- **`Port 7438 is already in use by PID …`** — another studio is running; stop that PID
+  and relaunch (launchers never kill the port owner).
+- **CUDA/MPS unavailable** — `web.env_check` reports it; check your GPU driver (Windows)
+  or that you are on MPS-capable hardware (macOS), then rerun setup.
+- **`Plotter Studio setup is incomplete: missing …`** — SAM2, Torch, or the checkpoint
+  is absent at runtime; rerun the platform setup script (the server never installs it).
+
+## Legacy GUI
 
 ```sh
 uv run python main.py
@@ -137,7 +165,7 @@ web/           Flask API + plotter driver (serves the SPA, runs the engine, plot
 main.py        Legacy GUI application (customtkinter)
 stipple.py     legacy grid_halftone()/random_stipple() — superseded by engine/pfm/grid.py
 svg_export.py  legacy export_svg() — superseded by engine/svg_io.py
-pyproject.toml uv project manifest (engine + web deps; `gpu` extra adds Torch)
+pyproject.toml uv project manifest (engine + web deps; `cuda`/`mps` + `sam2` extras add Torch/SAM2)
 uv.lock        locked dependency tree
 bridge/        wireless serial bridge: drive the plotter from Mac Inkscape (see bridge/README.md)
 ```
