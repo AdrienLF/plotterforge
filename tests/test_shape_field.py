@@ -1,12 +1,18 @@
 import math
+import random
 import unittest
 
 from engine.shape_field import (
     DEFAULT_SHAPE_LAYERS,
+    SHAPE_FIELD_PARAMS,
     SHAPE_TYPES,
+    field_points,
     normalize_shape_layers,
+    normalize_shape_field_params,
     primitive,
+    shape_field,
 )
+from engine.params import defaults
 
 
 class ShapeLayerNormalizationTest(unittest.TestCase):
@@ -61,3 +67,70 @@ class ShapePrimitiveTest(unittest.TestCase):
                     self.assertEqual(line[0], line[-1])
                 else:
                     self.assertNotEqual(line[0], line[-1])
+
+
+class ShapeFieldGenerationTest(unittest.TestCase):
+    def params(self):
+        params = defaults(SHAPE_FIELD_PARAMS)
+        params["shape_layers"] = DEFAULT_SHAPE_LAYERS
+        return normalize_shape_field_params(SHAPE_FIELD_PARAMS, params)
+
+    def test_all_layouts_produce_requested_finite_tile_count(self):
+        for layout in ("square", "brick", "hex", "triangular", "jittered"):
+            with self.subTest(layout=layout):
+                params = self.params() | {"layout": layout, "rows": 3, "columns": 4}
+                points = field_points(params, random.Random(7))
+                self.assertEqual(len(points), 12)
+                self.assertTrue(
+                    all(
+                        math.isfinite(point["x"]) and math.isfinite(point["y"])
+                        for point in points
+                    )
+                )
+
+    def test_modes_produce_distinct_non_empty_geometry(self):
+        outputs = {}
+        for mode in ("nested", "alternating", "connected", "overlapping"):
+            params = self.params() | {
+                "combination_mode": mode,
+                "rows": 2,
+                "columns": 3,
+            }
+            lines, _, _ = shape_field(params, seed=9)
+            self.assertTrue(lines)
+            outputs[mode] = lines
+        self.assertEqual(len({repr(lines) for lines in outputs.values()}), 4)
+
+    def test_repeats_modulation_and_randomness_are_deterministic(self):
+        params = self.params()
+        params.update(
+            {
+                "rows": 3,
+                "columns": 3,
+                "modulation_source": "wave",
+                "modulation_target": "combined",
+                "modulation_amount": 0.7,
+                "position_jitter": 0.15,
+                "rotation_jitter": 25.0,
+                "scale_jitter": 0.2,
+            }
+        )
+        params["shape_layers"] = [
+            {**DEFAULT_SHAPE_LAYERS[0], "repeat_count": 3}
+        ]
+
+        first = shape_field(params, seed=42)[0]
+        second = shape_field(params, seed=42)[0]
+        changed = shape_field(params, seed=43)[0]
+
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, changed)
+
+    def test_output_budget_fails_before_large_geometry_is_built(self):
+        params = self.params() | {"rows": 60, "columns": 60}
+        params["shape_layers"] = [
+            {**DEFAULT_SHAPE_LAYERS[0], "repeat_count": 24},
+            {**DEFAULT_SHAPE_LAYERS[0], "id": "circle-2", "repeat_count": 24},
+        ]
+        with self.assertRaisesRegex(ValueError, "50,000"):
+            shape_field(params, seed=0)

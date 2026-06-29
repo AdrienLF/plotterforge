@@ -52,6 +52,71 @@ DEFAULT_SHAPE_LAYERS = [
     },
 ]
 
+SHAPE_FIELD_PARAMS = [
+    Param(
+        "layout",
+        "enum",
+        "square",
+        group="Field",
+        choices=["square", "brick", "hex", "triangular", "jittered"],
+    ),
+    Param(
+        "combination_mode",
+        "enum",
+        "nested",
+        group="Field",
+        choices=["nested", "alternating", "connected", "overlapping"],
+    ),
+    Param("rows", "int", 7, group="Field", min=1, max=60),
+    Param("columns", "int", 5, group="Field", min=1, max=60),
+    Param("spacing", "float", 4.2, group="Field", min=0.2, max=40, help="cm"),
+    Param(
+        "field_rotation", "angle", 0.0, group="Field", min=-180, max=180
+    ),
+    Param(
+        "field_offset_x", "float", 0.0, group="Field", min=-60, max=60, help="cm"
+    ),
+    Param(
+        "field_offset_y", "float", 0.0, group="Field", min=-60, max=60, help="cm"
+    ),
+    Param("layout_jitter", "float", 0.25, group="Field", min=0, max=1),
+    Param(
+        "modulation_source",
+        "enum",
+        "none",
+        group="Evolution",
+        choices=["none", "row", "column", "radial", "wave", "noise"],
+    ),
+    Param(
+        "modulation_target",
+        "enum",
+        "scale",
+        group="Evolution",
+        choices=["scale", "rotation", "offset", "combined"],
+    ),
+    Param(
+        "modulation_amount", "float", 0.0, group="Evolution", min=0, max=2
+    ),
+    Param(
+        "modulation_frequency", "float", 1.0, group="Evolution", min=0.05, max=12
+    ),
+    Param(
+        "modulation_phase",
+        "angle",
+        0.0,
+        group="Evolution",
+        min=-360,
+        max=360,
+    ),
+    Param("position_jitter", "float", 0.0, group="Random", min=0, max=1),
+    Param("rotation_jitter", "float", 0.0, group="Random", min=0, max=180),
+    Param("scale_jitter", "float", 0.0, group="Random", min=0, max=1),
+    Param(
+        "drop_probability", "float", 0.0, group="Random", min=0, max=0.95
+    ),
+    Param("seed", "int", 0, group="Random"),
+]
+
 
 def _number(value, default, low, high):
     try:
@@ -120,6 +185,14 @@ def normalize_shape_layers(raw_layers):
     if not any(layer["enabled"] for layer in layers):
         raise ValueError("Shape Field needs at least one enabled shape layer")
     return layers
+
+
+def normalize_shape_field_params(schema, values):
+    normalized = validate(schema, values)
+    normalized["shape_layers"] = normalize_shape_layers(
+        (values or {}).get("shape_layers", DEFAULT_SHAPE_LAYERS)
+    )
+    return normalized
 
 
 def _polar(radius, angle):
@@ -201,3 +274,184 @@ def primitive(layer, radius):
         )
         for i in range(count + 1)
     ]
+
+
+def field_points(params, rng):
+    rows, columns = int(params["rows"]), int(params["columns"])
+    spacing, layout = float(params["spacing"]), params["layout"]
+    raw = []
+    for row in range(rows):
+        for column in range(columns):
+            if layout == "brick":
+                x, y = (column + 0.5 * (row % 2)) * spacing, row * spacing
+            elif layout == "hex":
+                x = column * spacing * 1.5
+                y = (row + 0.5 * (column % 2)) * spacing * math.sqrt(3)
+            elif layout == "triangular":
+                x = (column + 0.5 * (row % 2)) * spacing
+                y = row * spacing * math.sqrt(3) / 2
+            else:
+                x, y = column * spacing, row * spacing
+            if layout == "jittered":
+                amount = params["layout_jitter"] * spacing
+                x += rng.uniform(-amount, amount)
+                y += rng.uniform(-amount, amount)
+            raw.append(
+                {
+                    "row": row,
+                    "column": column,
+                    "index": len(raw),
+                    "x": x,
+                    "y": y,
+                }
+            )
+
+    center_x = (min(tile["x"] for tile in raw) + max(tile["x"] for tile in raw)) / 2
+    center_y = (min(tile["y"] for tile in raw) + max(tile["y"] for tile in raw)) / 2
+    target_x = float(params.get("page_width", 29.7)) / 2 + params["field_offset_x"]
+    target_y = float(params.get("page_height", 42.0)) / 2 + params["field_offset_y"]
+    angle = math.radians(params["field_rotation"])
+    cosine, sine = math.cos(angle), math.sin(angle)
+    for tile in raw:
+        x, y = tile["x"] - center_x, tile["y"] - center_y
+        tile["x"] = target_x + x * cosine - y * sine
+        tile["y"] = target_y + x * sine + y * cosine
+    return raw
+
+
+def modulation_value(params, tile, max_radius, seed):
+    source = params["modulation_source"]
+    if source == "none":
+        return 0.0
+    if source == "row":
+        return -1.0 + 2.0 * tile["row"] / max(1, params["rows"] - 1)
+    if source == "column":
+        return -1.0 + 2.0 * tile["column"] / max(1, params["columns"] - 1)
+    center_x = float(params.get("page_width", 29.7)) / 2 + params["field_offset_x"]
+    center_y = float(params.get("page_height", 42.0)) / 2 + params["field_offset_y"]
+    if source == "radial":
+        distance = math.hypot(tile["x"] - center_x, tile["y"] - center_y)
+        return -1.0 + 2.0 * distance / max(max_radius, 1e-9)
+    if source == "noise":
+        return random.Random((seed + 1) * 1_000_003 + tile["index"]).uniform(
+            -1.0, 1.0
+        )
+    phase = math.radians(params["modulation_phase"])
+    progress = tile["index"] / max(1, params["rows"] * params["columns"] - 1)
+    return math.sin(
+        2 * math.pi * params["modulation_frequency"] * progress + phase
+    )
+
+
+def transform_line(line, scale, rotation, x, y):
+    angle = math.radians(rotation)
+    cosine, sine = math.cos(angle), math.sin(angle)
+    return [
+        (
+            x + scale * px * cosine - scale * py * sine,
+            y + scale * px * sine + scale * py * cosine,
+        )
+        for px, py in line
+    ]
+
+
+def estimate_polylines(params, tile_count):
+    layers = [layer for layer in params["shape_layers"] if layer["enabled"]]
+    if params["combination_mode"] == "alternating":
+        per_tile = max(layer["repeat_count"] for layer in layers)
+    else:
+        per_tile = sum(layer["repeat_count"] for layer in layers)
+    estimate = tile_count * per_tile
+    if params["combination_mode"] == "connected":
+        estimate += tile_count * 3
+    if estimate > 50_000:
+        raise ValueError(
+            f"Shape Field would emit about {estimate:,} polylines (limit 50,000); "
+            "reduce rows, columns, layers, or repeats"
+        )
+    return estimate
+
+
+def shape_field(params, seed=0):
+    layers = normalize_shape_layers(params.get("shape_layers", DEFAULT_SHAPE_LAYERS))
+    params = {**params, "shape_layers": layers}
+    rng = random.Random(seed)
+    tiles = field_points(params, rng)
+    estimate_polylines(params, len(tiles))
+    spacing = float(params["spacing"])
+    page_width = float(params.get("page_width", 29.7))
+    page_height = float(params.get("page_height", 42.0))
+    center_x = page_width / 2 + params["field_offset_x"]
+    center_y = page_height / 2 + params["field_offset_y"]
+    max_radius = max(
+        math.hypot(tile["x"] - center_x, tile["y"] - center_y) for tile in tiles
+    )
+    lines = []
+    kept = {}
+    enabled = [layer for layer in layers if layer["enabled"]]
+
+    for tile in tiles:
+        if rng.random() < params["drop_probability"]:
+            continue
+        x = tile["x"] + rng.uniform(-1, 1) * params["position_jitter"] * spacing
+        y = tile["y"] + rng.uniform(-1, 1) * params["position_jitter"] * spacing
+        rotation = rng.uniform(-1, 1) * params["rotation_jitter"]
+        scale = max(0.0, 1.0 + rng.uniform(-1, 1) * params["scale_jitter"])
+        modulation = modulation_value(params, tile, max_radius, seed)
+        amount, target = params["modulation_amount"], params["modulation_target"]
+        if target in {"scale", "combined"}:
+            scale *= max(0.0, 1.0 + 0.5 * amount * modulation)
+        if target in {"rotation", "combined"}:
+            rotation += 180.0 * amount * modulation
+        if target in {"offset", "combined"}:
+            x += 0.5 * spacing * amount * modulation
+            y -= 0.5 * spacing * amount * modulation
+        kept[(tile["row"], tile["column"])] = (x, y)
+
+        selected = (
+            [enabled[tile["index"] % len(enabled)]]
+            if params["combination_mode"] == "alternating"
+            else enabled
+        )
+        for layer_index, layer in enumerate(selected):
+            layer_x = x + layer["offset_x"] * spacing
+            layer_y = y + layer["offset_y"] * spacing
+            if params["combination_mode"] == "overlapping" and layer_index:
+                angle = 2 * math.pi * (layer_index - 1) / max(
+                    1, len(selected) - 1
+                )
+                layer_x += 0.5 * spacing * math.cos(angle)
+                layer_y += 0.5 * spacing * math.sin(angle)
+            for repeat in range(layer["repeat_count"]):
+                radius = (
+                    0.5
+                    * spacing
+                    * layer["scale"]
+                    * scale
+                    * layer["repeat_scale"] ** repeat
+                )
+                if radius <= 1e-9:
+                    continue
+                base = primitive(layer, radius)
+                lines.append(
+                    transform_line(
+                        base,
+                        1.0,
+                        layer["rotation"]
+                        + rotation
+                        + layer["repeat_rotation"] * repeat,
+                        layer_x,
+                        layer_y,
+                    )
+                )
+
+    if params["combination_mode"] == "connected":
+        directions = [(0, 1), (1, 0)]
+        if params["layout"] in {"hex", "triangular"}:
+            directions.append((1, 1))
+        for (row, column), start in kept.items():
+            for row_delta, column_delta in directions:
+                end = kept.get((row + row_delta, column + column_delta))
+                if end is not None:
+                    lines.append([start, end])
+    return lines, page_width, page_height
