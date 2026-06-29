@@ -80,3 +80,18 @@ class SpokesAndCirclesCropTest(unittest.TestCase):
             lines,
             cluster_crops(params, page_width, page_height),
         )
+
+    def test_structural_spoke_stops_at_its_cluster_crop(self):
+        params = self.params()
+        params.update({"spokes": 1, "circles": 0, "rays": 0})
+
+        lines, page_width, page_height = spokes_and_circles(params)
+        crops = cluster_crops(params, page_width, page_height)
+
+        self.assertEqual(len(lines), 1)
+        self.assert_lines_outside_crops(lines, crops)
+        cluster_center = (
+            sum(point[0] for point in crops[0][:-1]) / (len(crops[0]) - 1),
+            sum(point[1] for point in crops[0][:-1]) / (len(crops[0]) - 1),
+        )
+        self.assertGreater(math.dist(lines[0][-1], cluster_center), 1.0)

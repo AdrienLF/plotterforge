@@ -122,14 +122,17 @@ def spokes_and_circles(p: dict, seed: int = 0):
             pw - float(p["side_margin"]), ph - float(p["top_bottom_margin"]))
     ray_lines = _clip_lines_to_rect(ray_lines, rect)
 
+    spoke_lines: list[Line] = []
+    if p["draw_spokes"]:
+        for s in range(spokes):
+            sp_ang = angle * s + 90 + float(p["spoke_rotation"])
+            spoke = [(0.0, 0.0), (0.0, -spoke_len)]
+            spoke = translate(rotate(spoke, sp_ang), cx_pg, cy_pg)
+            spoke_lines.append(spoke)
+
     pattern: list[Line] = []
     for s in range(spokes):
         sp_ang = angle * s + 90 + float(p["spoke_rotation"])
-
-        if p["draw_spokes"]:
-            spoke = [(0.0, 0.0), (0.0, -spoke_len)]
-            spoke = translate(rotate(spoke, sp_ang), cx_pg, cy_pg)
-            pattern.append(spoke)
 
         for c in range(1, circles + 1):
             circ = make_circle(cseg, circle_step * c)
@@ -149,7 +152,9 @@ def spokes_and_circles(p: dict, seed: int = 0):
         if p["draw_crop_radius"]:
             pattern.append(crop)
         ray_lines = cull_inside_polygon(ray_lines, crop)
+        spoke_lines = cull_inside_polygon(spoke_lines, crop)
 
+    pattern = spoke_lines + pattern
     pattern.extend(ray_lines)
 
     # Output in cm; the framework pipeline + worker handle margins, cropping,
