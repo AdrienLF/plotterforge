@@ -35,7 +35,11 @@ export default async function globalSetup() {
   // Isolated HOME so the backend's ~/.plotter_studio, ~/.plotter_settings.json,
   // resume-job and paths-cache files never touch the real user profile.
   const home = mkdtempSync(join(tmpdir(), "plotter-e2e-"));
-  const cmd = process.env.E2E_BACKEND_CMD || "uv run python -m web.server";
+  // Isolated, locked, runtime-only environment: Playwright cannot inherit or
+  // mutate the project's .venv, CUDA, MPS, or SAM2.
+  const cmd =
+    process.env.E2E_BACKEND_CMD ||
+    "uv run --isolated --locked --no-dev python -m web.server";
 
   backend = spawn(cmd, {
     cwd: REPO,

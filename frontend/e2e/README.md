@@ -21,7 +21,11 @@ npm run e2e                       # or: npm run e2e:ui
 
 The backend listens on port **7440** (override `E2E_PORT`). Set `E2E_SKIP_BUILD=1` to reuse the
 existing `web/static/app` build, or `E2E_BACKEND_CMD` to change how the server is launched
-(default `uv run python -m web.server`).
+(default `uv run --isolated --locked --no-dev python -m web.server`).
+
+The default command runs the backend in an **isolated** uv environment built only from the
+locked runtime dependencies. Playwright therefore cannot inherit or mutate the project's
+`.venv`, CUDA, MPS, or SAM2 — every run starts from the same deterministic base environment.
 
 ## Performance
 

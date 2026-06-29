@@ -70,5 +70,15 @@ class SetupScriptContractTest(unittest.TestCase):
         self.assertNotIn("conda ", script.lower())
 
 
+class E2EIsolationContractTest(unittest.TestCase):
+    def test_e2e_backend_uses_an_isolated_locked_base_environment(self):
+        setup = (ROOT / "frontend/e2e/global-setup.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            '"uv run --isolated --locked --no-dev python -m web.server"',
+            setup,
+        )
+        self.assertIn('SAM2_AUTO_SETUP: "0"', setup)
+
+
 if __name__ == "__main__":
     unittest.main()
