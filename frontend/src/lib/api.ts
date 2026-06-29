@@ -26,6 +26,13 @@ function paramDefaults(schema: Param[]): Record<string, any> {
   return out;
 }
 
+// Svelte's deeply reactive state is a Proxy, which structuredClone rejects.
+// Generator settings are JSON data already, so serialize them when crossing
+// between API payloads, composition snapshots, and reactive state.
+function cloneData<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 function layerStyle(layer: CompositionLayerT | null | undefined) {
   const style = (layer?.pathfinding_style ?? {}) as Partial<PathfindingStyleT>;
   return {
@@ -333,15 +340,16 @@ export const api = {
     if (!isCurrentProject(generation)) return false;
     studio.genSchema = sch.params;
     studio.generatorEditor = sch.editor ?? null;
-    studio.generatorDefaults = structuredClone(sch.defaults ?? {});
+    const defaults = cloneData(sch.defaults ?? {});
+    studio.generatorDefaults = defaults;
     studio.generatorShapeTypes = sch.shape_types ?? [];
     const keep: Record<string, any> = {};
     for (const p of sch.params) keep[p.name] = studio.genParams[p.name] ?? p.default;
     if (studio.generatorEditor === "shape_field") {
-      keep.shape_layers = structuredClone(
+      keep.shape_layers = cloneData(
         Array.isArray(studio.genParams.shape_layers)
           ? studio.genParams.shape_layers
-          : studio.generatorDefaults.shape_layers ?? [],
+          : defaults.shape_layers ?? [],
       );
     }
     studio.genParams = keep;
@@ -356,7 +364,7 @@ export const api = {
       if (!await this.selectGenerator(layer.source.generator_id)) return false;
       studio.genParams = {
         ...studio.genParams,
-        ...structuredClone(layer.source.params ?? {}),
+        ...cloneData(layer.source.params ?? {}),
       };
       return true;
     } finally {

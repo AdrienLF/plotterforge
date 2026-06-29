@@ -323,12 +323,15 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("generatorEditor = $state<string | null>(null)", state)
         self.assertIn("generatorDefaults = $state<Record<string, any>>({})", state)
         self.assertIn("generatorShapeTypes = $state<string[]>([])", state)
+        self.assertIn("function cloneData<T>(value: T): T", api)
         self.assertIn("studio.generatorEditor = sch.editor ?? null", api)
         self.assertIn(
-            "studio.generatorDefaults = structuredClone(sch.defaults ?? {})", api
+            "const defaults = cloneData(sch.defaults ?? {})", api
         )
+        self.assertIn("studio.generatorDefaults = defaults", api)
         self.assertIn("studio.generatorShapeTypes = sch.shape_types ?? []", api)
-        self.assertIn("keep.shape_layers = structuredClone", api)
+        self.assertIn("keep.shape_layers = cloneData", api)
+        self.assertIn("...cloneData(layer.source.params ?? {})", api)
         self.assertIn("async restoreGeneratorLayer", api)
         self.assertIn("await this.restoreGeneratorLayer(studio.selectedLayer)", api)
 
@@ -361,6 +364,7 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn('class="shape-field-editor"', editor)
         self.assertIn('class="shape-card"', editor)
         self.assertIn('aria-label="Add shape"', editor)
+        self.assertNotIn("structuredClone", editor)
         for shape_type in ("polygon", "star", "diamond", "cross", "spiral", "wave"):
             self.assertIn(f'layer.type === "{shape_type}"', editor)
 

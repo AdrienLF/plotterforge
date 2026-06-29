@@ -26,9 +26,7 @@
   }
 
   function addLayer() {
-    const source = structuredClone(
-      studio.generatorDefaults.shape_layers?.[0] ?? layers[0],
-    );
+    const source = studio.generatorDefaults.shape_layers?.[0] ?? layers[0];
     if (!source) return;
     setLayers([...layers, { ...source, id: crypto.randomUUID() }]);
   }
@@ -37,7 +35,7 @@
     const index = layers.findIndex((layer) => layer.id === id);
     if (index < 0) return;
     const copy = {
-      ...structuredClone(layers[index]),
+      ...layers[index],
       id: crypto.randomUUID(),
     };
     setLayers([
