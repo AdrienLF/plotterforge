@@ -48,5 +48,27 @@ class DependencyContractTest(unittest.TestCase):
         self.assertFalse((ROOT / "web" / "requirements.txt").exists())
 
 
+class SetupScriptContractTest(unittest.TestCase):
+    def test_windows_setup_is_exact_locked_and_full(self):
+        script = (ROOT / "setup-windows.bat").read_text(encoding="utf-8")
+        self.assertIn("uv python install 3.13", script)
+        self.assertIn("uv sync --locked --extra cuda --extra sam2", script)
+        self.assertIn("set \"SAM2_BUILD_CUDA=0\"", script)
+        self.assertIn("npm ci", script)
+        self.assertIn("npm run build", script)
+        self.assertIn("-m web.env_check --backend cuda --download-checkpoint --smoke", script)
+        self.assertNotIn("conda ", script.lower())
+
+    def test_macos_setup_is_exact_locked_and_full(self):
+        script = (ROOT / "setup-macos.command").read_text(encoding="utf-8")
+        self.assertIn("uv python install 3.13", script)
+        self.assertIn("uv sync --locked --extra mps --extra sam2", script)
+        self.assertIn("SAM2_BUILD_CUDA=0", script)
+        self.assertIn("npm ci", script)
+        self.assertIn("npm run build", script)
+        self.assertIn("-m web.env_check --backend mps --download-checkpoint --smoke", script)
+        self.assertNotIn("conda ", script.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
