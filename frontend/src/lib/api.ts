@@ -799,6 +799,16 @@ export const api = {
     pushLog("Saved plot job discarded");
   },
 
+  async plotPens(): Promise<{ multi: boolean; pens: import("./types").PlotPen[] }> {
+    const j = await jget("/api/plot/pens").catch(() => ({ multi: false, pens: [] }));
+    return { multi: !!j.multi, pens: j.pens ?? [] };
+  },
+
+  async confirmPen() {
+    studio.penChange = null;
+    await jpost("/api/plot/confirm-pen").catch((e) => pushLog("Confirm pen error: " + e.message));
+  },
+
   async savePlacement(silent = true) {
     const layer = studio.selectedLayer;
     if (layer) {
@@ -836,8 +846,26 @@ export function connectStream() {
     if (m.t === "proc") handleProc(m);
     else if (m.t === "log") pushLog(m.msg);
     else if (m.t === "state") {
+      studio.plotting =
+        m.state === "plotting" ||
+        m.state === "homing" ||
+        m.state === "parsing" ||
+        m.state === "pen_change";
+      if (m.state === "pen_change") {
+        studio.status = "Change pen";
+        studio.penChange = {
+          name: m.name,
+          colour: m.colour,
+          pen_index: m.pen_index ?? 0,
+          pen_total: m.pen_total ?? 0,
+          copy_index: m.copy_index ?? 0,
+          copies: m.copies ?? 1,
+          reason: m.reason ?? "swap",
+        };
+        return;
+      }
       studio.status = cap(m.state);
-      studio.plotting = m.state === "plotting" || m.state === "homing" || m.state === "parsing";
+      studio.penChange = null;
       if (m.state === "plotting") {
         studio.plotProgress = {
           done: m.done ?? 0,

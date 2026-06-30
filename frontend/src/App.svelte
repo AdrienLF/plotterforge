@@ -102,6 +102,30 @@
 
 <LayerStylePanel />
 
+{#if studio.penChange}
+  <div class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Change pen">
+      <h3>
+        <span class="swatch" style:background={studio.penChange.colour}></span>
+        Load pen: {studio.penChange.name}
+      </h3>
+      <p>
+        Pen {studio.penChange.pen_index + 1} of {studio.penChange.pen_total}{#if studio.penChange.copies > 1}
+          · copy {studio.penChange.copy_index + 1} of {studio.penChange.copies}{/if}.
+        {#if studio.penChange.reason === "new_sheet"}
+          Place a fresh sheet, then load this pen.
+        {:else}
+          Swap in this pen, then confirm. The plotter re-homes before continuing.
+        {/if}
+      </p>
+      <div class="modal-actions">
+        <button class="primary" onclick={() => api.confirmPen()}>Pen loaded — continue</button>
+        <button class="danger" onclick={() => api.stop()}>Stop</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <input
   bind:this={fileInput}
   type="file"
@@ -115,5 +139,48 @@
     background: var(--panel);
     border-left: 1px solid var(--line);
     height: 100%;
+  }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .modal {
+    max-width: 340px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+  .modal h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+  .modal p {
+    margin: 0 0 14px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    flex: none;
+  }
+  .modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .modal-actions button {
+    padding: 7px;
   }
 </style>

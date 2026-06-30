@@ -5,6 +5,7 @@ import type {
   DrawingSetT,
   Param,
   PlacementMm,
+  PenChange,
   PlotEstimate,
   PlotJob,
   PlotProgress,
@@ -94,6 +95,7 @@ class Studio {
   plotJob = $state<PlotJob | null>(null);
   plotProgress = $state<PlotProgress | null>(null);
   plotterTab = $state("estimate");
+  penChange = $state<PenChange | null>(null);
 
   // preview + status
   previewSvg = $state<string | null>(null);

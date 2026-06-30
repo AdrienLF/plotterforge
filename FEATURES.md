@@ -53,6 +53,7 @@ A running list of what this software does. One line each. Updated on every commi
 - **Multi-layer SVG export** — mm-unit SVG with a viewBox; one Inkscape layer group per pen.
 - **Composition export with progress + cancel** — composing/clipping a multi-layer page reports a per-layer progress bar over SSE and can be canceled mid-run (`/api/export/cancel`); the download runs via fetch with real error handling.
 - **Direct plotting** — Drive the plotter from the app: estimate, plot, pause/resume, discard, stop; live progress over SSE (`/api/stream`).
+- **Multi-pen plotting** — When a drawing uses more than one pen, the plot splits the SVG per pen and plots one pen at a time in enabled pen-list order: a pre-plot window confirms which pens are used, then between pens the plotter re-homes and a window prompts the operator to swap pens and confirm before continuing (copies nest all-pens-per-copy). Single-pen drawings plot unchanged.
 - **Manual jog** — Manual plotter movement commands (`/api/manual`).
 - **Wireless plotting** — Drive the iDraw from Mac Inkscape over a Tailscale `socat` serial bridge (see `bridge/`).
 

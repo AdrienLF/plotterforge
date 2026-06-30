@@ -196,6 +196,12 @@ export interface PlotProgress {
   progress_fraction: number;
 }
 
+export interface PlotPen {
+  name: string;
+  colour: string;
+  shapes: number;
+}
+
 export interface PlotJob {
   exists: boolean;
   id?: string;
@@ -205,7 +211,9 @@ export interface PlotJob {
   resumable: boolean;
   copies?: number;
   next_copy?: number;
+  next_pen?: number;
   next_path?: number;
+  pens?: { name: string; colour: string; shapes?: number }[] | null;
   total_paths?: number;
   total_shapes?: number;
   total_segments?: number;
@@ -214,4 +222,15 @@ export interface PlotJob {
   shapes_remaining?: number;
   segments_remaining?: number;
   progress_fraction?: number;
+}
+
+// Emitted by the worker (state==='pen_change') when it blocks for a pen swap.
+export interface PenChange {
+  name: string;
+  colour: string;
+  pen_index: number;
+  pen_total: number;
+  copy_index: number;
+  copies: number;
+  reason: "swap" | "new_sheet" | string;
 }

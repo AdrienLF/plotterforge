@@ -17,6 +17,7 @@
 
   let busy = $state("");
   let jogStep = $state(10);
+  let penReview = $state<import("../../lib/types").PlotPen[] | null>(null);
 
   const paperPresetId = $derived.by(() => {
     if (!studio.settings) return "";
@@ -72,6 +73,20 @@
   }
 
   async function startPlot() {
+    // Multi-pen drawings get a review window first; single-pen plots straight away.
+    const { multi, pens } = await api.plotPens();
+    if (multi) {
+      penReview = pens;
+      return;
+    }
+    await run("plot", async () => {
+      await api.saveSettings();
+      await api.plot();
+    });
+  }
+
+  async function confirmStartPlot() {
+    penReview = null;
     await run("plot", async () => {
       await api.saveSettings();
       await api.plot();
@@ -323,7 +338,89 @@
   </div>
 {/if}
 
+{#if penReview}
+  <div class="modal-backdrop">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Confirm pens">
+      <p>
+        This drawing uses {penReview.length} pens. They'll be plotted one at a time —
+        you'll be prompted to swap pens (and re-home) between each.
+      </p>
+      <ul class="pen-list">
+        {#each penReview as pen, i}
+          <li>
+            <span class="swatch" style:background={pen.colour}></span>
+            <span class="pen-name">{i + 1}. {pen.name}</span>
+            <span class="pen-count">{pen.shapes.toLocaleString()} shapes</span>
+          </li>
+        {/each}
+      </ul>
+      <div class="modal-actions">
+        <button class="primary" onclick={confirmStartPlot}>
+          Start with {penReview[0]?.name}
+        </button>
+        <button onclick={() => (penReview = null)}>Cancel</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+  }
+  .modal {
+    max-width: 320px;
+    padding: 16px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+  .modal p {
+    margin: 0 0 14px;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .pen-list {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pen-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+    flex: none;
+  }
+  .pen-name {
+    flex: 1;
+  }
+  .pen-count {
+    opacity: 0.7;
+  }
+  .modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .modal-actions button {
+    padding: 6px;
+  }
   .plotter {
     gap: 8px;
   }

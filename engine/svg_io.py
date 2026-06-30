@@ -8,12 +8,18 @@ pen becomes an Inkscape layer group so multi-pen plots stay separable.
 
 from __future__ import annotations
 
+import copy
+from xml.etree import ElementTree as ET
+
 from .geometry import Drawing, Layer
 
 _SVG_NS = (
     'xmlns="http://www.w3.org/2000/svg" '
     'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"'
 )
+
+_SVG_URI = "http://www.w3.org/2000/svg"
+_INK_URI = "http://www.inkscape.org/namespaces/inkscape"
 
 
 def _fmt(v: float) -> str:
@@ -136,6 +142,108 @@ def lines_to_svg_layers(pen_lines, w_mm: float, h_mm: float) -> str:
         f'<svg {_SVG_NS} width="{_fmt(w_mm)}mm" height="{_fmt(h_mm)}mm" '
         f'viewBox="0 0 {_fmt(w_mm)} {_fmt(h_mm)}">\n' + "\n".join(groups) + "\n</svg>"
     )
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _pen_label(el) -> str | None:
+    """The Inkscape layer label, however the parser namespaced it."""
+    return (el.get(f"{{{_INK_URI}}}label")
+            or el.get("inkscape:label")
+            or el.get("label"))
+
+
+def split_svg_by_pen(svg_bytes, pen_order):
+    """Split a composed multi-layer SVG into one SVG per pen.
+
+    The composed document groups paths into Inkscape layer groups
+    (``<g inkscape:groupmode="layer" inkscape:label="{pen}" stroke="{colour}">``,
+    produced by ``_render_layer`` / ``_lines_group``) nested inside the
+    composition's per-layer ``<g transform=…>`` wrappers. Each returned SVG keeps
+    those ancestor transforms so placement is unchanged, but contains only one
+    pen's groups — so the existing plot pipeline draws one pen at a time.
+
+    ``pen_order`` is a list of ``(name, colour)`` (the enabled pen list, in order).
+    Returns ``[{"name", "colour", "shapes", "svg"}]`` for each pen label that has
+    drawable paths, ordered by ``pen_order`` first, then any leftover labels.
+    Drawable content that is not inside a labelled layer group is ignored (the
+    caller only uses the split when >1 pen is present; single/no-pen drawings keep
+    the legacy whole-SVG path).
+    """
+    if isinstance(svg_bytes, str):
+        svg_bytes = svg_bytes.encode("utf-8")
+    root = ET.fromstring(svg_bytes)
+    parent = {child: el for el in root.iter() for child in el}
+
+    # Bucket each pen-layer <g> by its label, in document order.
+    buckets: dict[str, dict] = {}
+    order_seen: list[str] = []
+    for el in root.iter():
+        if _local(el.tag) != "g":
+            continue
+        label = _pen_label(el)
+        if label is None:
+            continue
+        shapes = sum(1 for d in el.iter() if _local(d.tag) in ("path", "circle"))
+        if shapes == 0:
+            continue
+        b = buckets.get(label)
+        if b is None:
+            b = {"colour": el.get("stroke") or "#000000", "groups": [], "shapes": 0}
+            buckets[label] = b
+            order_seen.append(label)
+        b["groups"].append(el)
+        b["shapes"] += shapes
+
+    if not buckets:
+        return []
+
+    # Order: pen_order labels first (matched by name), then leftovers as seen.
+    ordered_labels: list[str] = []
+    for name, _colour in pen_order or []:
+        if name in buckets and name not in ordered_labels:
+            ordered_labels.append(name)
+    for label in order_seen:
+        if label not in ordered_labels:
+            ordered_labels.append(label)
+
+    ET.register_namespace("", _SVG_URI)
+    ET.register_namespace("inkscape", _INK_URI)
+    root_attrs = (
+        f'width="{root.get("width", "")}" height="{root.get("height", "")}" '
+        f'viewBox="{root.get("viewBox") or root.get("viewbox") or ""}"'
+    )
+
+    out = []
+    for label in ordered_labels:
+        b = buckets[label]
+        body = []
+        for group in b["groups"]:
+            wrapped = copy.deepcopy(group)
+            # Re-wrap in each transform-bearing ancestor (root → group) so the
+            # composition layer's placement/scale is preserved.
+            node = parent.get(group)
+            chain = []
+            while node is not None and node is not root:
+                if _local(node.tag) == "g" and node.get("transform"):
+                    chain.append(node.get("transform"))
+                node = parent.get(node)
+            inner = ET.tostring(wrapped, encoding="unicode")
+            for tf in chain:  # innermost ancestor first → wrap outward
+                inner = f'<g transform="{tf}">{inner}</g>'
+            body.append(inner)
+        svg = (
+            f'<svg {_SVG_NS} {root_attrs}>\n' + "\n".join(body) + "\n</svg>"
+        )
+        out.append({
+            "name": label,
+            "colour": b["colour"],
+            "shapes": b["shapes"],
+            "svg": svg,
+        })
+    return out
 
 
 def lines_length_mm(lines) -> float:

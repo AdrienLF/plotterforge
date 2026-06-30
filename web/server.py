@@ -123,6 +123,9 @@ cfg = load_cfg()
 
 _plot_thread = None
 _stop_event  = threading.Event()
+# Set by /api/plot/confirm-pen when the operator confirms a pen swap; the multi-pen
+# worker blocks on this between pens. Cleared before each prompt.
+_pen_change_event = threading.Event()
 # Separate from the plot stop so cancelling an export never aborts a running plot.
 _export_stop_event = threading.Event()
 _subscribers = set()
@@ -1158,9 +1161,23 @@ def _delete_plot_job():
     except FileNotFoundError:
         pass
 
+def _pen_order():
+    """Enabled pens in list order, as (name, colour) — the multi-pen plot order."""
+    try:
+        return [(p.name, p.colour) for p in _project.drawing_set.active()]
+    except Exception:
+        return []
+
+def _split_svg_pens(svg_bytes):
+    """Per-pen split of a composed SVG, ordered by the enabled pen list.
+
+    Returns ``svg_io.split_svg_by_pen``'s list (0/1 entry → not a multi-pen job)."""
+    return svg_io.split_svg_by_pen(svg_bytes, _pen_order())
+
 def _create_plot_job(svg_bytes, settings, placement):
     now = _now_ms()
     copies = max(1, int((settings or {}).get('copies', 1) or 1))
+    split = _split_svg_pens(svg_bytes)
     job = {
         'id': uuid.uuid4().hex,
         'created_at': now,
@@ -1177,10 +1194,16 @@ def _create_plot_job(svg_bytes, settings, placement):
         'total_shapes': 0,
         'total_segments': 0,
         'next_copy': 0,
+        'next_pen': 0,
         'next_path': 0,
         'completed_shapes': 0,
         'completed_segments': 0,
     }
+    if len(split) > 1:
+        # Pen list + order is frozen into the job so resume re-splits identically
+        # even if the drawing set changes meanwhile.
+        job['pens'] = [{'name': p['name'], 'colour': p['colour'], 'shapes': p['shapes']}
+                       for p in split]
     return _save_plot_job(job)
 
 def _checkpoint_plot_job(job, **updates):
@@ -1220,7 +1243,9 @@ def _plot_job_public(job):
         'resumable': resumable,
         'copies': int(job.get('copies', 1) or 1),
         'next_copy': int(job.get('next_copy', 0) or 0),
+        'next_pen': int(job.get('next_pen', 0) or 0),
         'next_path': int(job.get('next_path', 0) or 0),
+        'pens': job.get('pens') or None,
         'total_paths': int(job.get('total_paths', 0) or 0),
         'total_shapes': total_shapes,
         'total_segments': total_segments,
@@ -1379,6 +1404,8 @@ class PlotterConn:
 # ── Plot worker ───────────────────────────────────────────────────────────────
 
 def _plot_worker(job, request_id=None):
+    if job.get('pens') and len(job['pens']) > 1:
+        return _plot_worker_multipen(job, request_id)
     plotter = None
     done = 0
     w = WideEvent('worker.plot', request_id)
@@ -1548,6 +1575,203 @@ def _plot_worker(job, request_id=None):
         if plotter:
             plotter.close()
 
+
+def _wait_pen_change(part, pen_i, pen_total, copy_i, copies, reason):
+    """Block until the operator confirms the pen swap (or stops). Emits a
+    'pen_change' state the UI turns into a modal."""
+    _pen_change_event.clear()
+    emit('state', state='pen_change', name=part['name'], colour=part['colour'],
+         pen_index=pen_i, pen_total=pen_total, copy_index=copy_i, copies=copies,
+         reason=reason)
+    emit('log', msg=f"Load pen {part['name']} (pen {pen_i + 1} of {pen_total})"
+                    + (f", new sheet for copy {copy_i + 1}" if reason == 'new_sheet' else '')
+                    + '…')
+    while not _pen_change_event.is_set():
+        if _stop_event.is_set():
+            raise RuntimeError('__stopped__')
+        _pen_change_event.wait(0.1)
+
+
+def _plot_worker_multipen(job, request_id=None):
+    """Plot a multi-pen drawing one pen at a time: re-home before each pen, and
+    block on a change-pen prompt between pens. Nesting is all-pens-per-copy
+    (finish a copy across its pens, swapping between each, then the next copy)."""
+    plotter = None
+    done = 0
+    w = WideEvent('worker.plot', request_id)
+    resumed = bool(job.get('next_path') or job.get('next_pen') or job.get('next_copy'))
+    w.set(resumed=resumed, multipen=True)
+    try:
+        svg_bytes = _plot_job_svg_bytes(job)
+        settings = job.get('settings') or cfg.copy()
+        placement = job.get('placement') or {'x': 0.0, 'y': 0.0}
+        w.set(port=settings.get('port'))
+        _checkpoint_plot_job(job, status='running')
+
+        emit('state', state='parsing')
+        emit('log', msg='Parsing SVG per pen…')
+        order = [(p['name'], p.get('colour', '#000000')) for p in job['pens']]
+        parts = svg_io.split_svg_by_pen(svg_bytes, order)
+        if len(parts) <= 1:
+            # SVG no longer splits (drawing changed) — fall back to single-pen.
+            job.pop('pens', None)
+            return _plot_worker(job, request_id)
+
+        pen_total = len(parts)
+        pen_polys = []
+        for part in parts:
+            if _stop_event.is_set():
+                raise RuntimeError('__stopped__')
+            pen_polys.append(_placed_polylines(
+                part['svg'].encode('utf-8'), settings, placement=placement))
+        pen_seg = [sum(max(0, len(p) - 1) for p in polys) for polys in pen_polys]
+        pen_paths = [len(polys) for polys in pen_polys]
+
+        copies = max(1, int(settings.get('copies', 1) or 1))
+        per_copy_paths = sum(pen_paths)
+        per_copy_segments = sum(pen_seg)
+        total_paths = per_copy_paths * copies
+        total = per_copy_segments * copies
+        total_shapes = total_paths
+
+        all_polys = [p for polys in pen_polys for p in polys]
+        if not all_polys:
+            _checkpoint_plot_job(job, status='error', error='No paths found in SVG.')
+            emit('state', state='error')
+            emit('error', msg='No paths found in SVG.')
+            w.emit('error', level=logging.ERROR, error='No paths found in SVG.')
+            return
+        estimated_seconds = _estimate_polylines(all_polys, settings).get('estimated_seconds')
+
+        def completed_at(copy_i, pen_i, path_i):
+            shapes = copy_i * per_copy_paths + sum(pen_paths[:pen_i]) + path_i
+            segs = (copy_i * per_copy_segments + sum(pen_seg[:pen_i])
+                    + sum(max(0, len(p) - 1) for p in pen_polys[pen_i][:path_i]))
+            return min(total_shapes, shapes), min(total, segs)
+
+        start_copy = max(0, min(copies, int(job.get('next_copy', 0) or 0)))
+        start_pen = max(0, min(pen_total - 1, int(job.get('next_pen', 0) or 0)))
+        start_path = max(0, int(job.get('next_path', 0) or 0))
+        if start_copy >= copies:
+            start_pen, start_path = 0, 0
+            done_shapes, done = total_shapes, total
+        else:
+            done_shapes, done = completed_at(start_copy, start_pen, start_path)
+
+        started_at = time.time()
+        w.set(copies=copies, paths=total_paths, shapes=total_shapes,
+              segments=total, est_seconds=estimated_seconds, pens=pen_total)
+
+        _checkpoint_plot_job(
+            job, status='running', copies=copies, total_paths=total_paths,
+            total_shapes=total_shapes, total_segments=total,
+            next_copy=start_copy, next_pen=start_pen, next_path=start_path,
+            completed_shapes=done_shapes, completed_segments=done)
+
+        emit('state', state='plotting', total=total, done=done,
+             shapes_total=total_shapes, shapes_done=done_shapes,
+             estimated_seconds=estimated_seconds)
+        emit('progress', phase='plotting',
+             **_plot_progress_payload(done, total, done_shapes, total_shapes,
+                                      started_at, estimated_seconds=estimated_seconds))
+        emit('log', msg=f'Plotting {pen_total} pens, {total_paths} paths…')
+
+        plotter = PlotterConn(settings['port'], settings)
+        first_action = True
+        for copy_i in range(start_copy, copies):
+            if _stop_event.is_set():
+                raise RuntimeError('__stopped__')
+            pen_start = start_pen if copy_i == start_copy else 0
+            for pen_i in range(pen_start, pen_total):
+                if _stop_event.is_set():
+                    raise RuntimeError('__stopped__')
+                path_start = (start_path if (copy_i == start_copy and pen_i == pen_start)
+                              else 0)
+                # Prompt before every pen except the first drawn action of a fresh
+                # job. On resume the loaded pen is unknown, so prompt then too.
+                if not (first_action and not resumed):
+                    reason = 'new_sheet' if (pen_i == 0 and copy_i > 0) else 'swap'
+                    _wait_pen_change(parts[pen_i], pen_i, pen_total, copy_i, copies, reason)
+                first_action = False
+
+                emit('state', state='homing')
+                emit('log', msg=f"Homing for pen {parts[pen_i]['name']}…")
+                plotter.home()
+                plotter.init()
+                plotter.pen_up()
+                emit('state', state='plotting')
+
+                polys = pen_polys[pen_i]
+                for path_i in range(path_start, len(polys)):
+                    if _stop_event.is_set():
+                        raise RuntimeError('__stopped__')
+                    poly = polys[path_i]
+                    plotter.move(poly[0][0], poly[0][1])
+                    plotter.pen_down()
+                    arc = getattr(poly, 'arc', None)
+                    if arc is not None:
+                        plotter.arc(arc['cx'], arc['cy'], arc['r'])
+                        done += max(0, len(poly) - 1)
+                        emit('progress', phase='plotting',
+                             **_plot_progress_payload(done, total, done_shapes, total_shapes,
+                                                      started_at, estimated_seconds=estimated_seconds))
+                    else:
+                        for pt in poly[1:]:
+                            if _stop_event.is_set():
+                                raise RuntimeError('__stopped__')
+                            plotter.draw(pt[0], pt[1])
+                            done += 1
+                            if done % 25 == 0:
+                                emit('progress', phase='plotting',
+                                     **_plot_progress_payload(done, total, done_shapes,
+                                                              total_shapes, started_at,
+                                                              estimated_seconds=estimated_seconds))
+                    plotter.pen_up()
+                    # Advance the (copy, pen, path) cursor to the next position.
+                    ncopy, npen, npath = copy_i, pen_i, path_i + 1
+                    if npath >= pen_paths[pen_i]:
+                        npath, npen = 0, pen_i + 1
+                        if npen >= pen_total:
+                            npen, ncopy = 0, copy_i + 1
+                    done_shapes, done = completed_at(ncopy, npen, npath)
+                    _checkpoint_plot_job(
+                        job, status='running', next_copy=ncopy, next_pen=npen,
+                        next_path=npath, completed_shapes=done_shapes,
+                        completed_segments=done)
+                    emit('progress', phase='plotting',
+                         **_plot_progress_payload(done, total, done_shapes, total_shapes,
+                                                  started_at, estimated_seconds=estimated_seconds))
+
+        plotter.pen_up()
+        emit('log', msg='Returning home…')
+        plotter.move(0, 0)
+        _checkpoint_plot_job(job, status='done', next_copy=copies, next_pen=0,
+                             next_path=0, completed_shapes=total_shapes,
+                             completed_segments=total)
+        emit('state', state='done')
+        emit('progress', phase='plotting',
+             **_plot_progress_payload(total, total, total_shapes, total_shapes,
+                                      started_at, estimated_seconds=estimated_seconds))
+        emit('log', msg='Done!')
+        w.emit('success', done_segments=total)
+
+    except Exception as exc:
+        if _stop_event.is_set() or '__stopped__' in str(exc):
+            if job:
+                _checkpoint_plot_job(job, status='stopped')
+            emit('state', state='idle')
+            emit('log', msg='Stopped.')
+            w.emit('stopped', done_segments=done)
+        else:
+            if job:
+                _checkpoint_plot_job(job, status='error', error=str(exc))
+            emit('state', state='error')
+            emit('error', msg=str(exc))
+            w.emit('error', level=logging.ERROR, error=str(exc), done_segments=done)
+    finally:
+        if plotter:
+            plotter.close()
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 SPA_DIR = Path(app.static_folder) / 'app'
@@ -1623,6 +1847,24 @@ def plot_estimate():
 def plot_job_route():
     return jsonify(_plot_job_public(_load_plot_job()))
 
+@app.route('/api/plot/pens')
+def plot_pens_route():
+    """Pens detected in the current drawing, in plot order, for the pre-plot
+    confirm window. ``multi`` is True only when >1 pen has paths."""
+    _ensure_current_svg()
+    if _current_svg is None:
+        return jsonify(error='No SVG loaded'), 400
+    split = _split_svg_pens(_current_svg)
+    pens = [{'name': p['name'], 'colour': p['colour'], 'shapes': p['shapes']}
+            for p in split]
+    return jsonify(ok=True, multi=len(pens) > 1, pens=pens)
+
+@app.route('/api/plot/confirm-pen', methods=['POST'])
+def confirm_pen_route():
+    """Operator confirmed the pen swap — unblock the waiting multi-pen worker."""
+    _pen_change_event.set()
+    return jsonify(ok=True)
+
 @app.route('/api/plot', methods=['POST'])
 def plot():
     global _plot_thread, _stop_event
@@ -1634,6 +1876,7 @@ def plot():
             return jsonify(error='Already plotting'), 400
         _reset_events('state')
         _stop_event.clear()
+        _pen_change_event.clear()
         job = _create_plot_job(_current_svg, cfg.copy(), {'x': 0.0, 'y': 0.0})
         _plot_thread = threading.Thread(
             target=_plot_worker, args=(job, g.request_id), daemon=True
@@ -1655,6 +1898,7 @@ def resume_plot():
             return jsonify(error='Already plotting'), 400
         _reset_events('state')
         _stop_event.clear()
+        _pen_change_event.clear()
         _plot_thread = threading.Thread(
             target=_plot_worker, args=(job, g.request_id), daemon=True
         )
