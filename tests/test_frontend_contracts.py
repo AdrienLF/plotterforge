@@ -424,6 +424,36 @@ class FrontendContractsTest(unittest.TestCase):
         for shape_type in ("polygon", "star", "diamond", "cross", "spiral", "wave"):
             self.assertIn(f'layer.type === "{shape_type}"', editor)
 
+    def test_plot_preview_wiring_contract(self):
+        api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
+        playback = (ROOT / "frontend/src/lib/plotPlayback.svelte.ts").read_text(encoding="utf-8")
+        panel = (ROOT / "frontend/src/components/panels/PlotterPanel.svelte").read_text(encoding="utf-8")
+        viewport = (ROOT / "frontend/src/components/Viewport.svelte").read_text(encoding="utf-8")
+
+        # API: fetch method + endpoint string, and reset wired into switchProject.
+        self.assertIn("fetchPlotPreview", api_ts)
+        self.assertIn("/api/plot/preview-paths", api_ts)
+        switch = re.search(
+            r"async switchProject\(payload: any.*?\) \{(?P<body>.*?)\n  \},",
+            api_ts,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(switch)
+        self.assertIn("plotPlayback.reset()", switch.group("body"))
+
+        # Playback engine exports the singleton and its controls.
+        self.assertIn("export const plotPlayback", playback)
+        for member in ("load", "retime", "play", "pause", "seek", "segIndexAtOrBefore", "segAt"):
+            self.assertIn(member, playback)
+
+        # Panel: preview tab + native scrubber.
+        self.assertIn('"preview"', panel)
+        self.assertIn('type="range"', panel)
+
+        # Viewport: two stacked canvases.
+        self.assertIn("plot-ink", viewport)
+        self.assertIn("plot-live", viewport)
+
     def test_all_number_fields_use_the_readable_custom_stepper(self):
         components = ROOT / "frontend/src/components"
         native_number_inputs = []

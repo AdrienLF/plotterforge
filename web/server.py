@@ -1965,6 +1965,50 @@ def plot_pens_route():
             for p in split]
     return jsonify(ok=True, multi=len(pens) > 1, pens=pens)
 
+@app.route('/api/plot/preview-paths')
+def plot_preview_paths():
+    """Ordered polylines (plot order) for the preview emulator, per pen.
+
+    Mirrors /api/plot/estimate: fixed placement + respect_stop=False dodges the
+    stale-_stop_event bug. No timing here — the client retimes from settings so
+    speed changes don't need a round trip. Coords in mm, machine convention
+    (Y negative = down), rounded to 2 decimals."""
+    _ensure_current_svg()
+    if _current_svg is None:
+        return jsonify(error='No SVG loaded'), 400
+    try:
+        settings = cfg.copy()
+        split = _split_svg_pens(_current_svg)
+        if split:
+            entries = [(p['name'], p['colour'], p['svg'].encode('utf-8'))
+                       for p in split]
+        else:
+            entries = [('Pen', '#000000', _current_svg)]
+        pens = []
+        found_any = False
+        for name, colour, svg_bytes in entries:
+            polylines = _placed_polylines(
+                svg_bytes, settings, placement={'x': 0.0, 'y': 0.0},
+                respect_stop=False,
+            )
+            paths = []
+            for poly in polylines:
+                if len(poly) < 2:
+                    continue
+                flat = []
+                for x, y in poly:
+                    flat.append(round(float(x), 2))
+                    flat.append(round(float(y), 2))
+                paths.append(flat)
+            if paths:
+                found_any = True
+            pens.append({'name': name, 'colour': colour, 'paths': paths})
+        if not found_any:
+            return jsonify(error='No paths found in SVG.'), 400
+        return jsonify(ok=True, pens=pens)
+    except Exception as exc:
+        return jsonify(error=str(exc)), 500
+
 @app.route('/api/plot/confirm-pen', methods=['POST'])
 def confirm_pen_route():
     """Operator confirmed the pen swap — unblock the waiting multi-pen worker."""

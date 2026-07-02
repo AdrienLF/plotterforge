@@ -204,6 +204,17 @@ export interface PlotPen {
   shapes: number;
 }
 
+export interface PlotPreviewPen {
+  name: string;
+  colour: string;
+  paths: number[][];
+}
+
+export interface PlotPreview {
+  ok: true;
+  pens: PlotPreviewPen[];
+}
+
 export interface PlotJob {
   exists: boolean;
   id?: string;

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { studio, pushLog } from "./lib/state.svelte";
   import { api, connectStream } from "./lib/api";
+  import { plotPlayback } from "./lib/plotPlayback.svelte";
   import { isSvgFile } from "./lib/files";
   import type { AlignMode } from "./lib/placement";
   import MenuBar from "./components/MenuBar.svelte";
@@ -59,6 +60,7 @@
   type Step = "pathfinding" | "generate" | "composition" | "plot";
   function selectStep(step: Step) {
     studio.step = step;
+    if (step !== "plot") plotPlayback.pause();
     if (step === "plot") {
       studio.plotterTab = "estimate";
       void api.refreshEstimate(true);

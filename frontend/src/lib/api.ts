@@ -1,5 +1,6 @@
 import { studio, pushLog, reportError } from "./state.svelte";
-import type { CompositionLayerT, MaskShape, Param, PathfindingStyleT, SegmentationPromptT } from "./types";
+import { plotPlayback } from "./plotPlayback.svelte";
+import type { CompositionLayerT, MaskShape, Param, PathfindingStyleT, PlotPreview, SegmentationPromptT } from "./types";
 
 // Active export request, so the Cancel button can abort it client-side while
 // /api/export/cancel stops the server-side compose.
@@ -188,6 +189,7 @@ export const api = {
     studio.stats = null;
     studio.plotProgress = null;
     studio.plotEstimate = null;
+    plotPlayback.reset();
     studio.processing = false;
     studio.plotting = false;
     studio.progress = 0;
@@ -800,6 +802,16 @@ export const api = {
     }
     studio.plotEstimate = j;
     return j;
+  },
+
+  async fetchPlotPreview(): Promise<PlotPreview | null> {
+    const r = await fetch("/api/plot/preview-paths");
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      pushLog("Preview error: " + (j.error || r.statusText));
+      return null;
+    }
+    return j as PlotPreview;
   },
 
   async refreshPlotJob() {

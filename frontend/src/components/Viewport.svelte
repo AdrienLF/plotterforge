@@ -8,6 +8,7 @@
     type AlignMode,
   } from "../lib/placement";
   import { anchorOffset, effectiveBounds, studio } from "../lib/state.svelte";
+  import { plotPlayback, type Seg } from "../lib/plotPlayback.svelte";
   import type { CompositionLayerT, MaskShape } from "../lib/types";
 
   const PX_PER_MM = 2.4;
@@ -51,6 +52,93 @@
   });
 
   const selectedLayer = $derived(studio.selectedLayer);
+
+  // ── Plot preview overlay ────────────────────────────────────────────────
+  let plotInk: HTMLCanvasElement | undefined = $state();
+  let plotLive: HTMLCanvasElement | undefined = $state();
+  let inkDrawnUpTo = -1; // last segment index committed to the ink canvas
+  let inkLoadGen = -1;
+
+  function applyStyle(ctx: CanvasRenderingContext2D, s: Seg) {
+    if (s.kind === 2) {
+      ctx.strokeStyle = s.colour;
+      ctx.lineWidth = 0.3;
+      ctx.setLineDash([]);
+    } else {
+      ctx.strokeStyle = "rgba(128,128,128,0.35)";
+      ctx.lineWidth = 0.15;
+      ctx.setLineDash([1.5, 1.5]);
+    }
+  }
+
+  // Server Y is negative-down; negate to draw back in top-left mm space.
+  function strokeSeg(ctx: CanvasRenderingContext2D, s: Seg, ex: number, ey: number) {
+    if (s.kind === 0) return; // pause draws nothing
+    applyStyle(ctx, s);
+    ctx.beginPath();
+    ctx.moveTo(s.x0, -s.y0);
+    ctx.lineTo(ex, -ey);
+    ctx.stroke();
+  }
+
+  function drawPlotFrame(t: number, gen: number) {
+    if (!plotInk || !plotLive || !plotPlayback.loaded) return;
+    const ictx = plotInk.getContext("2d");
+    const lctx = plotLive.getContext("2d");
+    if (!ictx || !lctx) return;
+    const T = PX_PER_MM;
+
+    const completed = plotPlayback.segIndexAtOrBefore(t); // last fully-drawn seg
+
+    // Ink layer: append-only, full redraw only on new load or scrub-backward.
+    if (gen !== inkLoadGen || completed < inkDrawnUpTo) {
+      ictx.setTransform(1, 0, 0, 1, 0, 0);
+      ictx.clearRect(0, 0, plotInk.width, plotInk.height);
+      ictx.setTransform(T, 0, 0, T, 0, 0);
+      inkDrawnUpTo = -1;
+      inkLoadGen = gen;
+    }
+    if (completed > inkDrawnUpTo) {
+      ictx.setTransform(T, 0, 0, T, 0, 0);
+      for (let i = inkDrawnUpTo + 1; i <= completed; i++) {
+        const s = plotPlayback.segAt(i);
+        strokeSeg(ictx, s, s.x1, s.y1);
+      }
+      inkDrawnUpTo = completed;
+    }
+
+    // Live layer: cleared every frame — current partial segment + pen dot.
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(0, 0, plotLive.width, plotLive.height);
+    lctx.setTransform(T, 0, 0, T, 0, 0);
+    const cur = completed + 1;
+    let dotX = 0, dotY = 0, dotColour = "#000000";
+    if (cur < plotPlayback.segCount) {
+      const s = plotPlayback.segAt(cur);
+      const dur = s.t1 - s.t0;
+      const f = dur <= 0 ? 1 : Math.min(1, Math.max(0, (t - s.t0) / dur));
+      const ex = s.x0 + (s.x1 - s.x0) * f;
+      const ey = s.y0 + (s.y1 - s.y0) * f;
+      strokeSeg(lctx, s, ex, ey);
+      dotX = ex; dotY = ey; dotColour = s.colour;
+    } else if (completed >= 0) {
+      const s = plotPlayback.segAt(completed);
+      dotX = s.x1; dotY = s.y1; dotColour = s.colour;
+    }
+    lctx.setLineDash([]);
+    lctx.fillStyle = dotColour;
+    lctx.beginPath();
+    lctx.arc(dotX, -dotY, 0.6, 0, Math.PI * 2);
+    lctx.fill();
+  }
+
+  $effect(() => {
+    // Re-run on time, load, or page-size change.
+    const t = plotPlayback.currentTime;
+    const gen = plotPlayback.loadGeneration;
+    void page.w; void page.h;
+    if (studio.step === "plot" && plotPlayback.loaded) drawPlotFrame(t, gen);
+  });
 
   const drawingSize = $derived.by(() => {
     if (!selectedLayer) return { w: page.w, h: page.h };
@@ -922,6 +1010,21 @@
             {/if}
           </svg>
         {/if}
+
+        {#if studio.step === "plot" && plotPlayback.loaded}
+          <canvas
+            class="plot-ink"
+            bind:this={plotInk}
+            width={page.w * PX_PER_MM}
+            height={page.h * PX_PER_MM}
+          ></canvas>
+          <canvas
+            class="plot-live"
+            bind:this={plotLive}
+            width={page.w * PX_PER_MM}
+            height={page.h * PX_PER_MM}
+          ></canvas>
+        {/if}
       {:else}
         <div class="placeholder">Import an image to begin</div>
       {/if}
@@ -957,6 +1060,16 @@
   }
   .page.placing {
     cursor: grabbing;
+  }
+  .plot-ink,
+  .plot-live {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+  }
+  .plot-live {
+    z-index: 1;
   }
   .guide,
   .sheet-mid-v,
