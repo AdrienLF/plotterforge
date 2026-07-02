@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "../lib/api";
+  import { renderFlatNibPreview } from "../lib/flatNib";
   import {
     A4_PORTRAIT,
     alignPlacement,
@@ -253,7 +254,22 @@
   // frame. Resolution is the layout size; zooming in blurs like any raster — the
   // explicit trade for a usable viewport.
   function layerPathsUrl(layer: CompositionLayerT) {
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(layer.svg)}`;
+    // Flat-nib preview is client-only and never written back — see lib/flatNib.
+    // Only engine-generated layers emit the plain "M x,y L x,y" centerlines the
+    // outline math expects, so skip arbitrary imported kind:"svg" content.
+    const pens = studio.drawingSet?.pens ?? [];
+    let svg = layer.svg;
+    if (!studio.showPenPreview) {
+      // Preview off (View ▸ Pen width & nib): ignore pen width and nib shape,
+      // draw every stroke as a uniform thin line so the raw geometry reads
+      // clearly. 0.2mm ≈ 0.5px at PX_PER_MM.
+      svg = svg.replace(/stroke-width="[^"]*"/g, 'stroke-width="0.2"');
+    } else if (layer.kind !== "svg" && pens.some((p) => p.enabled && p.nib_shape === "flat")) {
+      svg = renderFlatNibPreview(layer.svg, pens);
+    }
+    // ponytail: parse-per-render is fine gated behind a flat pen; memoize by
+    // (layer.svg, pens) only if dense flat drawings measurably lag.
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }
 
   // ── Mask drawing ──────────────────────────────────────────────────────────

@@ -58,6 +58,9 @@ class Studio {
   });
   showLayerBounds = $state(true);
   showGuides = $state(true);
+  // Render pen stroke width + flat-nib calligraphy in the preview. Off = every
+  // stroke drawn as a uniform thin line (raw centerline geometry).
+  showPenPreview = $state(true);
   layerStyleOpen = $state(false);
   layerStyleSchema = $state<Param[]>([]);
   // Active mask-drawing tool (composition step). null = not drawing.

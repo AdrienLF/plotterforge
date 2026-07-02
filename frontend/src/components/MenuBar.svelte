@@ -147,6 +147,13 @@
         >
           <span class="check">{studio.showLayerBounds ? "✓" : ""}</span>Show bounds
         </button>
+        <button
+          aria-pressed={studio.showPenPreview}
+          onclick={() => run(() => (studio.showPenPreview = !studio.showPenPreview))}
+          title="Off: draw every stroke as a uniform thin line, ignoring pen width and nib"
+        >
+          <span class="check">{studio.showPenPreview ? "✓" : ""}</span>Pen width &amp; nib
+        </button>
       </div>
     {/if}
   </div>

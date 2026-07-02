@@ -49,6 +49,8 @@ class Pen:
     weight: float = 1.0              # relative share of shapes
     stroke_mm: float = 0.5
     enabled: bool = True
+    nib_shape: str = "round"         # "round" | "flat" (flat = chisel nib, preview only)
+    start_angle_deg: float = 0.0     # page-frame angle a flat nib is held at, 0–179
 
     def to_dict(self) -> dict:
         return {
@@ -58,6 +60,8 @@ class Pen:
             "weight": self.weight,
             "stroke_mm": self.stroke_mm,
             "enabled": self.enabled,
+            "nib_shape": self.nib_shape,
+            "start_angle_deg": self.start_angle_deg,
         }
 
     @classmethod

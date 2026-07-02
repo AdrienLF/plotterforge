@@ -47,6 +47,8 @@ export interface Pen {
   weight: number;
   stroke_mm: number;
   enabled: boolean;
+  nib_shape: "round" | "flat";
+  start_angle_deg: number;
 }
 
 export interface DrawingSetT {

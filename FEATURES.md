@@ -36,11 +36,12 @@ A running list of what this software does. One line each. Updated on every commi
 ## Drawing area & pens
 - **Drawing Area** — Page size, units, orientation, padding, scaling mode, pen-width rescaling.
 - **Drawing Sets (pens)** — Multi-pen sets with colour and per-pen size in mm (stroke width), edited in the Pens panel and reflected in the preview's stroke; items distributed across pens. Pen library presets.
+- **Flat-nib preview** — Mark a pen as a flat/chisel nib (e.g. Pilot Parallel) held at a fixed angle; the on-screen preview approximates the calligraphic mark — full width perpendicular to the nib, thinning to a hairline when travel runs parallel to it. Toggle the whole width/nib preview off in View ▸ Pen width & nib to draw every stroke as a uniform thin line (raw centerline geometry). Preview-only: the exported/plotted SVG stays a plain centerline (the physical nib makes its own width).
 
 ## Viewport
 - **Pan / zoom / fit** — Wheel zoom, drag pan, one-shot auto-fit, Fit button.
 - **Snapping guides** — Alignment guides while moving layers.
-- **View menu** — Top-bar View menu with Show guides (A4 boundary + A4/sheet center lines) and Show bounds (layer bounds) toggles; both default on, session-level, independent of the workflow step. Snap lines stay visible regardless.
+- **View menu** — Top-bar View menu with Show guides (A4 boundary + A4/sheet center lines), Show bounds (layer bounds), and Pen width & nib (render pen stroke width + flat-nib calligraphy, off = uniform thin lines) toggles; all default on, session-level, independent of the workflow step. Snap lines stay visible regardless.
 
 ## Versions
 - **Snapshot version control** — Save, load, rename, reorder, delete drawing snapshots with thumbnails.

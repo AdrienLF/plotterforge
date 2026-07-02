@@ -31,6 +31,8 @@
       weight: 1,
       stroke_mm: 0.5,
       enabled: true,
+      nib_shape: "round",
+      start_angle_deg: 0,
     });
     save();
   }
@@ -83,12 +85,46 @@
             onchange={save}
             title="Weight (share of shapes)"
           />
-          <label class="sz" title="Pen size (mm) — reflected in the preview stroke width">
+          <button
+            type="button"
+            class="nib-toggle"
+            class:active={pen.nib_shape === "flat"}
+            aria-pressed={pen.nib_shape === "flat"}
+            title={pen.nib_shape === "flat"
+              ? "Flat/chisel nib — calligraphic preview (click for round)"
+              : "Round nib — click for flat/chisel nib preview"}
+            onclick={() => {
+              pen.nib_shape = pen.nib_shape === "flat" ? "round" : "flat";
+              save();
+            }}
+          >✒</button>
+          <label
+            class="sz"
+            title={pen.nib_shape === "flat"
+              ? "Nib width (mm) — Pilot Parallel ≈ 1.5–6mm"
+              : "Pen size (mm) — reflected in the preview stroke width"}
+          >
             <NumStep min={0.05} step={0.1} bind:value={pen.stroke_mm} onchange={save} />
             <span>mm</span>
           </label>
           <span class="pct">{pct(pen)}%</span>
           <button class="icon del" title="Remove" onclick={() => removePen(i)}>✕</button>
+          {#if pen.nib_shape === "flat"}
+            <div class="nib-row">
+              <span class="ang-label">Angle</span>
+              <label class="sz ang" title="Nib angle (°)">
+                <NumStep
+                  min={0}
+                  max={179}
+                  step={5}
+                  bind:value={pen.start_angle_deg}
+                  onchange={save}
+                  title="Nib angle (°)"
+                />
+                <span>°</span>
+              </label>
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -125,7 +161,7 @@
   }
   .pen {
     display: grid;
-    grid-template-columns: auto 28px minmax(0, 1fr) 40px 60px 30px auto;
+    grid-template-columns: auto 28px minmax(0, 1fr) 40px auto 60px 30px auto;
     gap: 5px;
     align-items: center;
     background: var(--panel-2);
@@ -142,6 +178,41 @@
   .sz span {
     font-size: 10px;
     color: var(--text-dim);
+  }
+  .nib-row {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 0 0 2px;
+  }
+  .ang-label {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .sz.ang {
+    width: 80px;
+    flex: 0 0 auto;
+  }
+  .nib-toggle {
+    padding: 0 3px;
+    height: 18px;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .nib-toggle:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .nib-toggle.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
   }
   .pen.off {
     opacity: 0.45;
