@@ -22,6 +22,8 @@ from engine.composition import (
     compose_visible_svg, layer_svg_zip, normalize_svg_to_page, parse_svg_size_mm,
     replace_selected_layer,
 )
+from engine.geometry import clip_polyline_polygon
+from engine.layer_clip import iter_drawables_with_clips, prune_clip_levels
 from engine.regions import mask_bbox
 from engine import project as project_mod
 from engine.project import Project, VersionSnapshotError, get_or_create
@@ -749,22 +751,35 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
     finally:
         os.unlink(tmp)
 
-    drawable = [el for el in svg_doc.elements()
-                if not isinstance(el, (se.Group, se.SVG))]
+    # Each drawable is paired with its active SVG clip-path polygons (Cavalry
+    # masks arrive as <clipPath> groups, which svgelements does not render).
+    drawable = list(iter_drawables_with_clips(svg_doc))
     total_el = len(drawable)
 
     polylines = []
 
-    for idx, element in enumerate(drawable):
+    for idx, (element, clip_levels) in enumerate(drawable):
         if on_progress:
             on_progress(idx, total_el)
         if respect_stop and _stop_event.is_set():
             raise RuntimeError('__stopped__')
 
+        if clip_levels:
+            try:
+                el_bbox = element.bbox()
+            except Exception:
+                el_bbox = None
+            clip_levels = prune_clip_levels(clip_levels, el_bbox)
+        # Clip polygons in machine mm (Y negative = down), matching the
+        # polyline coordinates built below.
+        mm_levels = [[[(x * PX_TO_MM, -(y * PX_TO_MM)) for x, y in ring] for ring in lv]
+                     for lv in clip_levels]
+
         # True circles become a single native G2 arc at plot time. Keep a polygon
         # of points for travel ordering / estimation / resume accounting, and tag
         # it with the arc so the draw loop can replace the segments with one G2.
-        circ = _circle_meta(element, se, PX_TO_MM)
+        # A clipped circle can't stay a native arc — flatten and clip instead.
+        circ = None if mm_levels else _circle_meta(element, se, PX_TO_MM)
         if circ is not None:
             cx, cy, r = circ
             m = min(48, max(12, int(2 * math.pi * r / max(1e-6, step_px * PX_TO_MM))))
@@ -780,13 +795,14 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
         except Exception:
             continue
 
+        el_polys = []
         current = []
         for seg in segs:
             name = type(seg).__name__
 
             if name == 'Move':
                 if len(current) >= 2:
-                    polylines.append(current)
+                    el_polys.append(current)
                 p = seg.end
                 current = [(p.x * PX_TO_MM, -(p.y * PX_TO_MM))]
 
@@ -794,7 +810,7 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
                 if current:
                     current.append(current[0])
                 if len(current) >= 2:
-                    polylines.append(current)
+                    el_polys.append(current)
                 current = []
 
             elif name == 'Line':
@@ -844,7 +860,20 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
                     current.append((p.x * PX_TO_MM, -(p.y * PX_TO_MM)))
 
         if len(current) >= 2:
-            polylines.append(current)
+            el_polys.append(current)
+
+        if mm_levels:
+            # Rings within a level union (multi-shape clipPath); levels intersect
+            # (nested clip-path groups). ponytail: overlapping rings in one level
+            # may duplicate sub-segments; dedupe if that ever shows on paper.
+            for pl in el_polys:
+                pieces = [pl]
+                for lv in mm_levels:
+                    pieces = [sub for p in pieces for ring in lv
+                              for sub in clip_polyline_polygon(p, ring)]
+                polylines.extend(p for p in pieces if len(p) >= 2)
+        else:
+            polylines.extend(el_polys)
 
     if on_progress:
         on_progress(total_el, total_el)
