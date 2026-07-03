@@ -1905,7 +1905,7 @@ def cavalry_bridge():
         _cavalry_apply(layer, svg)
         _project.save_composition_layers()
         _sync_current_svg_from_composition()
-        emit('cavalry')
+        emit('cavalry', session=session)
         return jsonify(ok=True, layer_id=layer.id)
     # New Cavalry session (or no capture layer): park the frame (latest wins)
     # and ask the user. Re-emit on every post so a freshly opened SPA still
@@ -1949,8 +1949,38 @@ def cavalry_session():
     _cavalry_dismissed = None
     _project.save_composition_layers()
     _sync_current_svg_from_composition()
-    emit('cavalry')
+    emit('cavalry', session=layer.source.get('session'))
     return jsonify(ok=True, layer_id=layer.id, composition=_composition_payload())
+
+@app.route('/api/cavalry/reconnect', methods=['POST'])
+def cavalry_reconnect():
+    """Re-arm a Cavalry layer as the live capture target, even after the user
+    dismissed its session. Clears the dismissal and unbinds the session so the
+    next incoming frame (from whatever script is posting) binds to this layer;
+    if a frame is already parked, adopt it immediately."""
+    global _cavalry_pending, _cavalry_dismissed
+    layer_id = (request.json or {}).get('layer_id')
+    comp = _composition()
+    layer = next((l for l in _cavalry_layers(comp) if l.id == layer_id), None)
+    if layer is None:
+        return jsonify(error='No such Cavalry layer'), 404
+    _cavalry_dismissed = None
+    layer.source.update(live=True, session=None)
+    _cavalry_arm(comp, layer)
+    captured = False
+    if _cavalry_pending is not None:
+        # A dismissed session may still be posting — adopt its latest frame now.
+        layer.source['session'] = _cavalry_pending['session']
+        _cavalry_apply(layer, _cavalry_pending['svg'])
+        _cavalry_pending = None
+        captured = True
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    emit('cavalry', session=layer.source.get('session'))
+    # captured=True → a frame was waiting and is now live; False → armed and
+    # waiting for the next Cavalry post (nothing was buffered).
+    return jsonify(ok=True, layer_id=layer.id, captured=captured,
+                   composition=_composition_payload())
 
 @app.route('/api/placement', methods=['POST'])
 def placement_route():

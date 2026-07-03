@@ -101,6 +101,9 @@ class CavalryBridgeTest(unittest.TestCase):
     def decide(self, action):
         return self.client.post("/api/cavalry/session", json={"action": action})
 
+    def reconnect(self, layer_id):
+        return self.client.post("/api/cavalry/reconnect", json={"layer_id": layer_id})
+
     def add_layer_via_button(self):
         return self.client.post("/api/composition/cavalry-layer")
 
@@ -222,6 +225,34 @@ class CavalryBridgeTest(unittest.TestCase):
         # Further posts from bbb still park but keep quiet.
         r2 = self.post(session="bbb")
         self.assertEqual(r2.status_code, 202)
+
+    def test_reconnect_after_dismiss_rebinds_parked_frame(self):
+        layer = self._capture_layer("aaa")  # live on session aaa
+        self.post(CAVALRY_SVG.replace("L1080 0", "L7 0"), session="bbb")
+        self.decide("dismiss")              # dismissed=bbb, pending cleared
+        # bbb keeps posting → parks silently.
+        self.post(CAVALRY_SVG.replace("L1080 0", "L9 0"), session="bbb")
+        r = self.reconnect(layer.id)
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(server._cavalry_dismissed)
+        self.assertIsNone(server._cavalry_pending)
+        self.assertTrue(layer.source["live"])
+        self.assertEqual(layer.source["session"], "bbb")
+        self.assertIn("L9 0", layer.svg)    # adopted the parked frame
+
+    def test_reconnect_without_parked_frame_unbinds_session(self):
+        layer = self._capture_layer("aaa")  # pending is None (aaa flowed in)
+        r = self.reconnect(layer.id)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(layer.source["live"])
+        self.assertIsNone(layer.source["session"])  # next frame (any session) binds
+        self.post(session="zzz")
+        self.assertEqual(layer.source["session"], "zzz")
+
+    def test_reconnect_unknown_layer_is_404(self):
+        self.add_layer_via_button()
+        r = self.reconnect("no-such-id")
+        self.assertEqual(r.status_code, 404)
 
     def test_decision_without_pending_is_conflict(self):
         r = self.decide("new")

@@ -337,6 +337,20 @@ export const api = {
     return j;
   },
 
+  // Re-arm a Cavalry layer as the live target (undoes an earlier "Ignore").
+  async cavalryReconnect(layerId: string) {
+    studio.status = "Reconnecting Cavalry…";
+    const j = await jpost("/api/cavalry/reconnect", { layer_id: layerId });
+    if (j.composition) this.applyComposition(j);
+    // captured → a buffered frame was applied, layer is live now. Otherwise the
+    // layer is armed and the next Cavalry post will bind (nudge a shape to send).
+    studio.cavalryAwaitingSync = !j.captured;
+    studio.status = j.captured
+      ? "Cavalry live — synced"
+      : "Cavalry armed — waiting for next frame (nudge something in Cavalry)";
+    return j;
+  },
+
   async duplicateLayer(id: string) {
     const j = await jpost(`/api/composition/layers/${id}/duplicate`);
     this.applyComposition(j);
@@ -865,6 +879,34 @@ export const api = {
   },
 };
 
+// ── Cavalry liveness: badge is green only while frames keep arriving ─────────────
+// ponytail: Cavalry posts only on scene change (no heartbeat), so an idle-but-open
+// Cavalry greys out after the timeout and re-greens on the next edit. Add a
+// heartbeat ping to plotter-bridge.js if idle-grey proves annoying.
+const CAVALRY_TIMEOUT_MS = 10_000;
+const cavalrySeenAt = new Map<string, number>();
+
+function markCavalrySeen(session: string) {
+  cavalrySeenAt.set(session, Date.now());
+  if (!studio.cavalryConnectedSessions.has(session)) {
+    studio.cavalryConnectedSessions = new Set([...studio.cavalryConnectedSessions, session]);
+  }
+}
+
+function sweepCavalryConnections() {
+  const now = Date.now();
+  const live = new Set<string>();
+  for (const [s, t] of cavalrySeenAt) {
+    if (now - t < CAVALRY_TIMEOUT_MS) live.add(s);
+    else cavalrySeenAt.delete(s);
+  }
+  const cur = studio.cavalryConnectedSessions;
+  if (live.size !== cur.size || [...live].some((s) => !cur.has(s))) {
+    studio.cavalryConnectedSessions = live;
+  }
+}
+setInterval(sweepCavalryConnections, 2000);
+
 // ── Server-Sent Events: live process + plot progress ────────────────────────────
 export function connectStream() {
   const es = new EventSource("/api/stream");
@@ -878,7 +920,14 @@ export function connectStream() {
     if (m.t === "ping") return;
     if (m.t === "proc") handleProc(m);
     else if (m.t === "log") pushLog(m.msg);
-    else if (m.t === "cavalry") void api.refreshComposition();
+    else if (m.t === "cavalry") {
+      if (studio.cavalryAwaitingSync) {
+        studio.cavalryAwaitingSync = false;
+        studio.status = "Cavalry live — synced";
+      }
+      if (m.session) markCavalrySeen(m.session);
+      void api.refreshComposition();
+    }
     else if (m.t === "cavalry_session")
       studio.cavalryPrompt = { session: m.session, layer_id: m.layer_id ?? null, layer_name: m.layer_name ?? null };
     else if (m.t === "state") {

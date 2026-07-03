@@ -245,9 +245,17 @@ function effectiveColour(el: Element): string {
  * (the composition's mm viewBox), so the element→viewport CTM maps local coords
  * straight to page mm — handling the scale(k) wrap and Cavalry leaf transforms
  * natively. Pure M/L paths map vertices directly (no oversampling of straight
- * runs); anything with curves samples getPointAtLength at ~0.4mm page steps
- * (matches engine/layer_clip.py _STEP_MM), capped at 4096 samples.
+ * runs); anything with curves samples getPointAtLength.
+ *
+ * This is PREVIEW-only, and getPointAtLength is very slow (~90µs/call — 0.4mm
+ * plot-fidelity sampling of a dense live Cavalry frame cost ~3.5s and froze the
+ * UI). Sample coarsely: PREVIEW_STEP_MM page step, capped at MAX_SAMPLES per
+ * element. A live layer re-runs this every frame, so cheapness beats fidelity —
+ * the plot/export path samples at true resolution server-side regardless.
  */
+const PREVIEW_STEP_MM = 2.5;
+const MAX_SAMPLES = 128;
+
 function flattenToPageMm(el: SVGGeometryElement, ctm: DOMMatrix): [number, number][] {
   const map = (x: number, y: number): [number, number] => [
     ctm.a * x + ctm.c * y + ctm.e,
@@ -263,7 +271,7 @@ function flattenToPageMm(el: SVGGeometryElement, ctm: DOMMatrix): [number, numbe
   const local = el.getTotalLength();
   if (!(local > 0)) return [];
   const scale = Math.hypot(ctm.a, ctm.b) || 1; // local→page units
-  const n = Math.min(4096, Math.max(2, Math.ceil((local * scale) / 0.4)));
+  const n = Math.min(MAX_SAMPLES, Math.max(2, Math.ceil((local * scale) / PREVIEW_STEP_MM)));
   const out: [number, number][] = [];
   for (let i = 0; i <= n; i++) {
     const pt = el.getPointAtLength((i / n) * local);

@@ -27,6 +27,7 @@ A running list of what this software does. One line each. Updated on every commi
 ## Live bridges
 - **Cavalry capture layers** — Add an explicit Cavalry layer, then the Cavalry UI script (`cavalry/plotter-bridge.js`) streams debounced SVG frames into it while preserving its placement. Captures persist with the project; reopening the script asks whether to continue overwriting the live layer, start a new layer, or ignore that session.
 - **Cavalry mask parity** — SVG-native `<clipPath>` masks in captured frames are baked into the plotted geometry (plot preview, plot job, estimate, export), matching what Cavalry and the viewport show. Nested clips intersect; multi-shape clips union; full-page clips are pruned so circles keep native G2 arcs.
+- **Cavalry reconnect** — A ⟳ button on any Cavalry layer re-arms it as the live capture target, undoing an earlier "Ignore this session": it clears the dismissal and rebinds the layer to whatever Cavalry script is currently posting (adopting a parked frame immediately if one is held).
 
 ## Composition (layers)
 - **Layer stack** — Multiple stacked layers, each bound to a region or the whole image; reorder, duplicate, delete, toggle visibility.
