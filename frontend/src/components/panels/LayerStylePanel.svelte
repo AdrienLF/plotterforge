@@ -47,6 +47,42 @@
     return [...m.entries()];
   });
 
+  // PFM family -> group header. Matches engine/pfm/_params.py FAMILY_LABELS
+  // plus the single-PFM families (grid/spiral/hatch/sketch/streamline/composite).
+  const PFM_FAMILY_LABELS: Record<string, string> = {
+    voronoi: "Voronoi",
+    lbg: "LBG",
+    adaptive: "Adaptive",
+    poisson: "Poisson",
+    grid: "Grid",
+    spiral: "Spiral",
+    hatch: "Hatch",
+    sketch: "Sketch",
+    streamline: "Streamline",
+    composite: "Composite",
+    dither: "Dither",
+    packing: "Packing",
+  };
+  // Only the sampler-family x style matrix names as "{Family} {Style}" —
+  // strip the redundant family prefix since the optgroup already shows it.
+  const PFM_SAMPLER_FAMILIES = new Set(["voronoi", "lbg", "adaptive", "poisson"]);
+
+  // studio.pfms is already grouped contiguously by family (registration
+  // order in engine/pfm/__init__.py), so a single pass is enough.
+  const pfmGroups = $derived.by(() => {
+    const out: { label: string; items: { id: string; label: string }[] }[] = [];
+    for (const pfm of studio.pfms) {
+      const label = PFM_FAMILY_LABELS[pfm.family] ?? pfm.family;
+      const optionLabel = PFM_SAMPLER_FAMILIES.has(pfm.family)
+        ? pfm.name.slice(label.length).trim()
+        : pfm.name;
+      const last = out[out.length - 1];
+      if (last?.label === label) last.items.push({ id: pfm.id, label: optionLabel });
+      else out.push({ label, items: [{ id: pfm.id, label: optionLabel }] });
+    }
+    return out;
+  });
+
   $effect(() => {
     if (!studio.layerStyleOpen || !layer) return;
     const pfm = style.pfm_id || studio.pfmId;
@@ -259,8 +295,12 @@
         <label>
           <span>PFM</span>
           <select value={style.pfm_id || studio.pfmId} onchange={(e) => setPfm((e.target as HTMLSelectElement).value)}>
-            {#each studio.pfms as pfm (pfm.id)}
-              <option value={pfm.id}>{pfm.name}</option>
+            {#each pfmGroups as group (group.label)}
+              <optgroup label={group.label}>
+                {#each group.items as item (item.id)}
+                  <option value={item.id}>{item.label}</option>
+                {/each}
+              </optgroup>
             {/each}
           </select>
         </label>
@@ -352,6 +392,16 @@
   }
   select {
     width: 100%;
+  }
+  select optgroup {
+    font-weight: 600;
+    font-style: normal;
+    color: var(--text-dim);
+    background: var(--panel);
+  }
+  select option {
+    font-weight: 400;
+    color: var(--text, inherit);
   }
   .row {
     display: grid;

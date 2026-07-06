@@ -11,6 +11,8 @@ The same point set is consumed by every style (stippling, TSP, triangulation,
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from PIL import Image
 
@@ -185,8 +187,119 @@ class LBGSampler:
         return sites, weights
 
 
+# ── Poisson-disk (Bridson 2007, variable-density) ───────────────────────────────
+
+class PoissonDiskSampler:
+    """Dart-throwing blue-noise sampler with a hard minimum-distance guarantee.
+
+    Unlike ``AdaptiveSampler`` (which thins a jittered grid probabilistically,
+    so close pairs can still slip through), every accepted point here is
+    rejected against a spatial hash of its neighbours, so two dots can never
+    overlap — useful for a fixed pen nib where overlap wastes ink/time.
+    """
+
+    @staticmethod
+    def run(img: Image.Image, p: dict, seed: int = 0):
+        rng = np.random.default_rng(seed)
+        d = _density_map(img, ignore_white=p.get("ignore_white", True))
+        h, w = d.shape
+
+        min_r = max(0.5, float(p.get("min_radius", 2.0)))
+        max_r = max(min_r + 0.1, float(p.get("max_radius", 10.0)))
+        k = max(1, int(p.get("candidates", 30)))
+        limit = int(p.get("point_limit", 0)) or 500_000
+
+        def radius_at(x: float, y: float) -> float:
+            ix = min(max(int(x), 0), w - 1)
+            iy = min(max(int(y), 0), h - 1)
+            return max_r - (max_r - min_r) * float(d[iy, ix])
+
+        pts0, wt0 = _dark_pixels(d)
+        if pts0.shape[0] == 0:
+            return np.zeros((0, 2), np.float32), np.zeros((0,), np.float32)
+
+        from scipy.spatial import cKDTree
+
+        # Neighbour conflicts are checked with a KD-tree over all *indexed*
+        # points, rebuilt periodically, plus a vectorised brute-force check
+        # over the small tail accepted since the last rebuild. A tail-per-cell
+        # grid keyed to min_r (Bridson's usual choice) would need a search
+        # window scaling with max_r/min_r, which blows up for a wide
+        # min/max ratio; the KD-tree's cost is insensitive to that ratio.
+        samples: list[tuple[float, float]] = []
+        radii: list[float] = []
+        active: list[int] = []
+        tree = None
+        tree_n = 0
+
+        def rebuild_tree() -> None:
+            nonlocal tree, tree_n
+            tree = cKDTree(np.asarray(samples))
+            tree_n = len(samples)
+
+        def has_conflict(x: float, y: float, r: float) -> bool:
+            reach = r + max_r
+            if tree_n:
+                cand = tree.query_ball_point((x, y), r=reach)
+                if cand:
+                    pts = np.asarray([samples[i] for i in cand])
+                    rs = np.asarray([radii[i] for i in cand])
+                    dist = np.hypot(pts[:, 0] - x, pts[:, 1] - y)
+                    if np.any(dist < np.maximum(r, rs)):
+                        return True
+            if len(samples) > tree_n:
+                tail = np.asarray(samples[tree_n:])
+                tail_r = np.asarray(radii[tree_n:])
+                dist = np.hypot(tail[:, 0] - x, tail[:, 1] - y)
+                if np.any(dist < np.maximum(r, tail_r)):
+                    return True
+            return False
+
+        prob0 = wt0 / wt0.sum()
+        sx, sy = pts0[int(rng.choice(pts0.shape[0], p=prob0))]
+        sx, sy = float(sx), float(sy)
+        samples.append((sx, sy))
+        radii.append(radius_at(sx, sy))
+        active.append(0)
+
+        while active and len(samples) < limit:
+            ai = int(rng.integers(0, len(active)))
+            i = active[ai]
+            ox, oy = samples[i]
+            orr = radii[i]
+            placed = False
+            for _ in range(k):
+                ang = rng.uniform(0, 2 * math.pi)
+                rad = rng.uniform(orr, 2 * orr)
+                nx_, ny_ = ox + math.cos(ang) * rad, oy + math.sin(ang) * rad
+                if not (0 <= nx_ < w and 0 <= ny_ < h):
+                    continue
+                if d[int(ny_), int(nx_)] <= 0.02:
+                    continue
+                nr = radius_at(nx_, ny_)
+                if not has_conflict(nx_, ny_, nr):
+                    idx = len(samples)
+                    samples.append((nx_, ny_))
+                    radii.append(nr)
+                    active.append(idx)
+                    placed = True
+                    # Amortised: tail scan cost stays bounded by sqrt(n).
+                    if len(samples) - tree_n >= max(200, int(math.sqrt(tree_n or 1))):
+                        rebuild_tree()
+                    break
+            if not placed:
+                active.pop(ai)
+
+        sites = np.asarray(samples, dtype=np.float32)
+        ix = np.clip(sites[:, 0].astype(int), 0, w - 1)
+        iy = np.clip(sites[:, 1].astype(int), 0, h - 1)
+        weights = d[iy, ix]
+        return sites, weights
+
+
 SAMPLERS = {
     "voronoi": WeightedVoronoiSampler,
     "adaptive": AdaptiveSampler,
     "lbg": LBGSampler,
+    "poisson": PoissonDiskSampler,
 }

@@ -33,10 +33,23 @@ LBG_SAMPLER = [
     Param("max_iterations", "int", 20, group="LBG Sampling", min=1, max=100),
 ]
 
+POISSON_SAMPLER = [
+    Param("min_radius", "float", 2.0, group="Poisson Sampling", min=0.5, max=100,
+          help="Minimum centre-to-centre spacing in the darkest areas"),
+    Param("max_radius", "float", 10.0, group="Poisson Sampling", min=0.5, max=150,
+          help="Spacing used in the lightest areas"),
+    Param("candidates", "int", 30, group="Poisson Sampling", min=4, max=100,
+          help="Rejection-sample attempts per active point before giving up"),
+    Param("point_limit", "int", 0, group="Poisson Sampling", min=0, max=200_000,
+          help="Hard cap on points (0 = no limit)"),
+    Param("ignore_white", "bool", True, group="Poisson Sampling"),
+]
+
 SAMPLER_PARAMS = {
     "voronoi": VORONOI_SAMPLER,
     "adaptive": ADAPTIVE_SAMPLER,
     "lbg": LBG_SAMPLER,
+    "poisson": POISSON_SAMPLER,
 }
 
 
@@ -79,6 +92,6 @@ STYLE_LABELS = {
     "tsp": "TSP",
 }
 
-FAMILY_LABELS = {"voronoi": "Voronoi", "adaptive": "Adaptive", "lbg": "LBG"}
+FAMILY_LABELS = {"voronoi": "Voronoi", "adaptive": "Adaptive", "lbg": "LBG", "poisson": "Poisson"}
 
 STYLE_ORDER = ["stippling", "dashes", "shapes", "triangulation", "tree", "diagram", "tsp"]

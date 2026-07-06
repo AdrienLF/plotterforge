@@ -80,6 +80,13 @@
     if (id) void api.loadLayerStyleSchema(studio.selectedLayer?.pathfinding_style?.pfm_id || studio.pfmId);
   }
 
+  // Select an existing layer and (re)open the Path Finding window on it.
+  async function openStyle(id: string) {
+    await api.selectLayer(id);
+    studio.layerStyleOpen = true;
+    void api.loadLayerStyleSchema(studio.selectedLayer?.pathfinding_style?.pfm_id || studio.pfmId);
+  }
+
   function setTool(mode: "rect" | "ellipse" | "pen") {
     studio.maskEdit = false;
     studio.maskMode = studio.maskMode === mode ? null : mode;
@@ -141,6 +148,12 @@
             onchange={(e) => rename(layer.id, (e.target as HTMLInputElement).value)}
           />
           <div class="actions">
+            <button
+              class="settings"
+              title="Path finding settings"
+              aria-label={`Path finding settings for ${layer.name}`}
+              onclick={() => openStyle(layer.id)}
+            >⚙</button>
             <button title="Move up" aria-label={`Move ${layer.name} up`} onclick={() => api.moveLayer(layer.id, 1)}>↑</button>
             <button title="Move down" aria-label={`Move ${layer.name} down`} onclick={() => api.moveLayer(layer.id, -1)}>↓</button>
             <button title="Duplicate" aria-label={`Duplicate ${layer.name}`} onclick={() => api.duplicateLayer(layer.id)}>⧉</button>
@@ -310,12 +323,15 @@
   .actions {
     grid-column: 2;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 4px;
   }
   .actions button {
     min-width: 0;
     padding: 2px 4px;
+  }
+  .actions .settings {
+    color: var(--accent);
   }
   .danger-text {
     color: var(--danger);

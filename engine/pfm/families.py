@@ -14,7 +14,7 @@ from ._params import (
 
 
 def _build() -> None:
-    for family in ("voronoi", "lbg", "adaptive"):
+    for family in ("voronoi", "lbg", "adaptive", "poisson"):
         sampler = SAMPLER_PARAMS[family]
         for style in STYLE_ORDER:
             params = SEED + sampler + style_params(style)

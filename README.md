@@ -24,10 +24,11 @@ launchers are offline and just start the prepared server. See **Full setup** and
 For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
 `/api` to the Flask server).
 
-- **Path Finding Modules (first wave, ~23):** Voronoi / LBG / Adaptive samplers ×
-  Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus the
-  ported Grid Halftone and Random Stipple. Every module's settings are
-  auto-generated from a typed schema (`engine/params.py`).
+- **Path Finding Modules (42):** Voronoi / LBG / Adaptive / Poisson-disk samplers ×
+  Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus Grid
+  Halftone, Random Stipple, Spiral, Hatch, Sketch, Streamlines, Composite,
+  Dither Halftone (Floyd-Steinberg), and Circle Packing. Every module's settings
+  are auto-generated from a typed schema (`engine/params.py`).
 - **GPU-first:** setup installs the platform PyTorch build (CUDA on Windows, MPS
   on macOS). `engine/accel.py` uses Torch for the heavy nearest-site /
   weighted-centroid stages when available, falling back to numpy/scipy only when
