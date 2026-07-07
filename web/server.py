@@ -3033,13 +3033,11 @@ def api_pen_library(name):
 def api_versions():
     if request.method == 'POST':
         data = request.json or {}
-        if _drawing is not None:
-            v = _project.add_version(_drawing, name=data.get('name', ''),
-                                     notes=data.get('notes', ''))
-        else:
-            svg = _ensure_current_svg() if _composition_has_visible_layers() else None
-            if svg is None:
-                return jsonify(error='Nothing to save — process a drawing first'), 400
+        # Composition-first: a version snapshots the whole visible page
+        # (layers + geometry). The single-drawing path only remains for the
+        # legacy pipeline when no composition exists.
+        svg = _ensure_current_svg() if _composition_has_visible_layers() else None
+        if svg is not None:
             polylines = svg_to_polylines(
                 svg, {**cfg, 'reordering': 'none'}, respect_stop=False
             )
@@ -3052,6 +3050,11 @@ def api_versions():
                 notes=data.get('notes', ''),
                 thumbnail=thumbnail,
             )
+        elif _drawing is not None:
+            v = _project.add_version(_drawing, name=data.get('name', ''),
+                                     notes=data.get('notes', ''))
+        else:
+            return jsonify(error='Nothing to save — process a drawing first'), 400
         return jsonify(ok=True, version=v.to_dict())
     return jsonify(versions=[v.to_dict() for v in _project.versions])
 
