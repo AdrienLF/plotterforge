@@ -14,7 +14,7 @@
 </script>
 
 <div class="rail">
-  <button class="icon" title="Import image" onclick={onImport}>🖼</button>
+  <button class="icon" title="Import image" data-tour="import" onclick={onImport}>🖼</button>
   <button class="icon" title="Fit to view" onclick={onFit}>⤢</button>
   <div class="sep"></div>
   <button

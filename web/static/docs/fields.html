@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painting with Fields · Plotter Studio</title>
+<style>
+  :root {
+    --bg: #141416;
+    --panel: #1c1c20;
+    --line: #2c2c32;
+    --text: #e8e8ea;
+    --dim: #9a9aa2;
+    --accent: #2e8bff;
+    --gold: #d8b46a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 48px 24px 120px; }
+  header.hero { margin-bottom: 48px; }
+  .kicker {
+    color: var(--accent);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: 42px;
+    line-height: 1.15;
+    margin: 10px 0 14px;
+  }
+  .lede { color: var(--dim); font-size: 18px; max-width: 620px; }
+  h2 {
+    font-family: Georgia, serif;
+    font-weight: 400;
+    font-size: 27px;
+    margin: 64px 0 12px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 15px; margin: 26px 0 6px; color: var(--gold); font-weight: 600; }
+  p { margin: 10px 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, kbd {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+  }
+  figure { margin: 22px 0; }
+  figure img {
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    display: block;
+  }
+  figcaption { color: var(--dim); font-size: 13px; margin-top: 8px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card strong { display: block; margin-bottom: 4px; }
+  .card p { margin: 0; color: var(--dim); font-size: 13.5px; }
+  .note {
+    border-left: 3px solid var(--gold);
+    background: var(--panel);
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 18px 0;
+    font-size: 14px;
+  }
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 18px 0; }
+  .steps li {
+    counter-increment: step;
+    position: relative;
+    padding: 0 0 18px 46px;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 1px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    display: grid;
+    place-items: center;
+  }
+  .angle-scale {
+    display: flex;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    margin: 14px 0 6px;
+    height: 56px;
+  }
+  .angle-scale div {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  footer { margin-top: 72px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+  @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Plotter Studio · Guide</div>
+  <h1>Painting with Fields</h1>
+  <p class="lede">
+    Most plotter tools give you knobs — one number for the whole page.
+    Fields turn each knob into a <em>surface</em>: dot size that swells in the
+    shadows, dashes that comb around a face, engraving lines you steer by hand
+    with a brush. This guide shows you how, no math required.
+  </p>
+</header>
+
+<h2>What a field is</h2>
+<p>
+  Any parameter with a <strong>◉</strong> button next to its name can be
+  <em>bound to a field</em>. Instead of one value everywhere, the parameter is
+  looked up per point from a grayscale map that stretches across your image:
+  where the map is dark the parameter is low, where it's light the parameter is
+  high (you choose the low/high range). The number in the slider is simply
+  ignored while a binding is active — unbind and it comes back.
+</p>
+<p>
+  A field is a <strong>mix of weighted sources</strong>. Stack them like
+  translucent layers: a little image tone, a touch of noise, a painted mask on
+  top. The editor previews the result live as a grayscale image.
+</p>
+
+<div class="cards">
+  <div class="card"><strong>Image tone</strong><p>Dark areas of your photo read high. The classic: parameters that follow the shadows.</p></div>
+  <div class="card"><strong>Edge strength</strong><p>High wherever the image has contrast — outlines, texture, detail.</p></div>
+  <div class="card"><strong>Edge distance</strong><p>Grows with distance from the nearest edge. Great for calm interiors vs. busy contours.</p></div>
+  <div class="card"><strong>Noise</strong><p>Coherent, organic variation (Perlin). Scale sets the feature size, seed re-rolls it.</p></div>
+  <div class="card"><strong>Radial</strong><p>A circular gradient from a centre point you choose. Vignettes, halos, targets.</p></div>
+  <div class="card"><strong>Linear</strong><p>A straight gradient at any angle. Sunrise fades, left-to-right ramps.</p></div>
+  <div class="card"><strong>Painted mask</strong><p>Your brush. Paint exactly where you want the effect — the most direct control there is.</p></div>
+</div>
+
+<h3>Shaping the mix</h3>
+<p>
+  Below the sources: <strong>Invert</strong> flips the map, <strong>gamma</strong>
+  bends the midtones (high gamma pushes the effect into only the darkest
+  regions), and <strong>min / max</strong> set what the darkest and lightest
+  points of the field mean in the parameter's real units — e.g. stipple dots
+  from 0.3&nbsp;mm to 2.5&nbsp;mm.
+</p>
+
+<figure>
+  <img src="img/panel-direction.png" alt="The Path Finding panel showing the Engraving parameters; bindable parameters carry a small ◉ button next to their label.">
+  <figcaption>Bindable parameters carry a small ◉ next to their label — here <em>Spacing Scale</em> and <em>Direction</em> on the Engraving PFM. Click it to open the field editor.</figcaption>
+</figure>
+
+<h2>Walkthrough: steer an engraving by hand</h2>
+<p>
+  The Engraving PFM shades your image with flowing lines: <em>tone</em> controls
+  how tightly they pack, a <em>direction field</em> controls where they flow.
+  By default direction comes from the image itself (lines follow form, like a
+  burin following a cheekbone). Binding <strong>Direction</strong> to a painted
+  field lets you comb the lines wherever you want instead.
+</p>
+<p><em>Prefer to learn in the app? <strong>Help&nbsp;→&nbsp;✦&nbsp;Tutorial: paint a direction field</strong> walks you through these exact steps with live tooltips.</em></p>
+
+<ol class="steps">
+  <li><strong>Import an image</strong> and click <strong>＋ Path finding</strong> in the Layers panel. The Path Finding window opens.</li>
+  <li><strong>Choose “Engraving”</strong> in the PFM dropdown (under Streamline).</li>
+  <li><strong>Click the ◉ next to Direction.</strong> The field editor opens. A Direction binding replaces the built-in edge/noise/radial mix entirely — the lines go exactly where your field says.</li>
+  <li><strong>Set the mix:</strong> drag <em>Image tone</em> to 0 and <em>Painted mask</em> to 1 for pure hand-steering. (Leave ~0.5 of <em>Edge strength</em> in if you want your strokes blended with the image's natural flow.)</li>
+  <li><strong>Click “Paint…”</strong> — the canvas becomes a brush over your image.</li>
+</ol>
+
+<figure>
+  <img src="img/paint-mode.png" alt="Field painting mode: a brush canvas over the source image with a toolbar for brush size, value, clear, cancel and save.">
+  <figcaption>Paint mode. The toolbar at the bottom sets brush size and <em>value</em> — and for a direction field, value <strong>is</strong> the angle.</figcaption>
+</figure>
+
+<h3>Brightness is angle</h3>
+<p>For direction fields, the gray you paint maps to the line angle:</p>
+<div class="angle-scale">
+  <div style="background:#111;color:#bbb">black · 0° — horizontal</div>
+  <div style="background:#808080;color:#111">mid-gray · 90° — vertical</div>
+  <div style="background:#f2f2f2;color:#333">white · 180° — horizontal again</div>
+</div>
+<p class="note">
+  Line direction has no “front”, so the scale wraps: white lands back at
+  horizontal. The canvas starts neutral mid-gray, which reads as
+  <em>vertical</em> — there is no “no opinion” gray, so paint generously.
+  Sweep the value slider between black and mid-gray to steer between
+  horizontal and vertical.
+</p>
+
+<ol class="steps" start="6">
+  <li value="6"><strong>Brush a few gestures</strong>, name the mask, hit <strong>Save</strong>.</li>
+  <li value="7"><strong>Pick your mask</strong> in the Painted mask dropdown. The preview shows the resolved angles (dark = 0°, light = 180°).</li>
+  <li value="8"><strong>Apply / Regenerate.</strong> Density still follows the image's tone; direction is now yours.</li>
+</ol>
+
+<figure>
+  <img src="img/binding-editor.png" alt="The field editor with the painted mask selected and a live grayscale preview of the resolved direction field.">
+  <figcaption>The field editor with a painted mask selected. The preview is the actual field the engraver will follow.</figcaption>
+</figure>
+
+<figure>
+  <img src="img/result.png" alt="Engraving output where the line flow visibly bends along the painted strokes.">
+  <figcaption>The result: engraving lines combed along the painted strokes — vertical in the untouched mid-gray, bending where the dark and light gestures were brushed.</figcaption>
+</figure>
+
+<h2>Recipes</h2>
+
+<h3>Dots that breathe with the light</h3>
+<p>
+  On any stippling PFM, bind <strong>Stipple Size</strong>, keep a single
+  <em>Image tone</em> layer at weight 1, set min ≈ 0.3 and max ≈ 2.5. Shadows
+  get bold dots, highlights get whispers. Add a low-weight <em>Noise</em> layer
+  (scale ~20) so the transition never looks mechanical.
+</p>
+
+<h3>Fur, drapery, wind</h3>
+<p>
+  On the Dashes style, bind <strong>Dash Angle</strong> and paint a direction
+  mask — every dash becomes a comb stroke. Keep <em>Distortion</em> around
+  20–40 so it stays hand-made.
+</p>
+
+<h3>Density you can paint</h3>
+<p>
+  All Streamline PFMs (and Engraving) have a bindable
+  <strong>Spacing Scale</strong>. Bind it to a painted mask and brush dark
+  where you want the lines to crowd, light where they should breathe —
+  independent of the image's own tone.
+</p>
+
+<h3>Copperplate shadows</h3>
+<p>
+  On Engraving, set <strong>Bands</strong> to 2–3 with a
+  <strong>Cross angle</strong> around 60°. Midtones get one pass; shadows get
+  crossed passes, exactly like classical crosshatching.
+</p>
+
+<h3>Vignette anything</h3>
+<p>
+  Add a <em>Radial</em> layer to any scalar binding and invert it: the effect
+  concentrates in the middle of the page and fades to the margins.
+</p>
+
+<h2>Good to know</h2>
+<p>
+  <strong>Bindings travel with the layer.</strong> They're saved in the
+  project and re-applied on every regenerate.
+  <strong>Regions work too</strong> — if the layer is limited to an AI region,
+  the field is sampled over that region's image.
+  <strong>The slider comes back.</strong> Unbind (button in the editor header)
+  and the parameter returns to its plain value.
+  <strong>Masks are reusable</strong> — paint once, bind it to several
+  parameters or several layers.
+</p>
+
+<footer>
+  Plotter Studio · Fields guide · Also see <strong>Help → ✦ Tutorial</strong> inside the app for the interactive version of this walkthrough.
+</footer>
+
+</div>
+</body>
+</html>

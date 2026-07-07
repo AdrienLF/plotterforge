@@ -85,6 +85,8 @@ class Studio {
   fieldMasks = $state<FieldMaskT[]>([]);
   // Field-mask painting mode (Viewport canvas overlay). null = not painting.
   fieldPaint = $state<null | { brush: number; value: number; name: string }>(null);
+  // Guided tutorial (Tour.svelte). null = inactive, else current step index.
+  tourStep = $state<number | null>(null);
 
   // pens
   drawingSet = $state<DrawingSetT | null>(null);

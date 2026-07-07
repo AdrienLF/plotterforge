@@ -18,6 +18,7 @@
   import PensPanel from "./components/panels/PensPanel.svelte";
   import PlotterPanel from "./components/panels/PlotterPanel.svelte";
   import VersionsPanel from "./components/panels/VersionsPanel.svelte";
+  import Tour from "./components/Tour.svelte";
 
   let viewport = $state<Viewport>();
   let fileInput: HTMLInputElement;
@@ -71,6 +72,7 @@
 
 <div class="app-grid">
   <div class="area-menu"><MenuBar onImport={pickImage} onPlot={() => selectStep("plot")} /></div>
+  <Tour />
   <div class="area-tabs"><StepTabs onSelect={selectStep} /></div>
   <div class="area-toolbar"><Toolbar onAlign={align} onFit={() => viewport?.fit()} /></div>
   <div class="area-rail"><ToolRail onImport={pickImage} onFit={() => viewport?.fit()} onPlot={() => selectStep("plot")} /></div>

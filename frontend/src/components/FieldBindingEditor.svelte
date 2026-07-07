@@ -130,13 +130,13 @@
             </div>
           {:else if def.type === "paint"}
             <div class="opts paint">
-              <select bind:value={row.paint_id}>
+              <select data-tour="paint-select" bind:value={row.paint_id}>
                 <option value="">— pick a mask —</option>
                 {#each studio.fieldMasks as m (m.id)}
                   <option value={m.id}>{m.name}</option>
                 {/each}
               </select>
-              <button type="button" onclick={onPaint}>Paint…</button>
+              <button type="button" data-tour="paint-btn" onclick={onPaint}>Paint…</button>
             </div>
           {/if}
         {/if}

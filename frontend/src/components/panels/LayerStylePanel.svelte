@@ -319,7 +319,7 @@
 
         <label>
           <span>PFM</span>
-          <select value={style.pfm_id || studio.pfmId} onchange={(e) => setPfm((e.target as HTMLSelectElement).value)}>
+          <select data-tour="pfm-select" value={style.pfm_id || studio.pfmId} onchange={(e) => setPfm((e.target as HTMLSelectElement).value)}>
             {#each pfmGroups as group (group.label)}
               <optgroup label={group.label}>
                 {#each group.items as item (item.id)}
@@ -368,6 +368,7 @@
 
         <button
           class="primary"
+          data-tour="generate"
           disabled={studio.processing || !style.enabled}
           onclick={generate}
         >

@@ -158,6 +158,25 @@
     {/if}
   </div>
 
+  <div class="menu" class:open={open === "help"}>
+    <button
+      class="summary"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggle("help");
+      }}
+      onmouseenter={() => open && (open = "help")}
+    >
+      Help
+    </button>
+    {#if open === "help"}
+      <div class="items">
+        <button onclick={() => run(() => (studio.tourStep = 0))}>✦ Tutorial: paint a direction field</button>
+        <button onclick={() => run(() => window.open("/static/docs/fields.html", "_blank"))}>Fields guide (docs)</button>
+      </div>
+    {/if}
+  </div>
+
   <div class="spacer"></div>
   <span class="doc muted">{studio.currentProject?.name ?? "—"}</span>
   <span class="doc muted dim">· {studio.imageName || "no image"}</span>

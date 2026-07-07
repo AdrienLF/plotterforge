@@ -106,7 +106,7 @@
 
 <div class="composition col">
   <div class="topbar">
-    <button class="add" onclick={addPfLayer}>＋ Path finding</button>
+    <button class="add" data-tour="add-pf" onclick={addPfLayer}>＋ Path finding</button>
     <button class="add" onclick={addLayer}>＋ Generator</button>
     <button class="add" onclick={() => api.addCavalryLayer()}>＋ Cavalry</button>
   </div>

@@ -21,7 +21,7 @@
   const bound = $derived(Boolean(binding));
 </script>
 
-<div class="ctrl">
+<div class="ctrl" data-param={param.name}>
   {#if param.type === "bool"}
     <label class="bool" title={param.help}>
       <input type="checkbox" bind:checked={value} />
