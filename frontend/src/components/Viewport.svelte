@@ -9,6 +9,7 @@
   } from "../lib/placement";
   import { anchorOffset, effectiveBounds, studio } from "../lib/state.svelte";
   import type { CompositionLayerT, MaskShape } from "../lib/types";
+  import FieldPaintBar from "./FieldPaintBar.svelte";
 
   const PX_PER_MM = 2.4;
 
@@ -63,7 +64,10 @@
     h: Math.min(A4_PORTRAIT.h, page.h),
   }));
 
-  const sourceMode = $derived(!!studio.imageUrl && (studio.regionSelecting || !studio.composition.layers.length));
+  const sourceMode = $derived(
+    !!studio.imageUrl &&
+      (studio.regionSelecting || !!studio.fieldPaint || !studio.composition.layers.length),
+  );
   const sourceRect = $derived.by(() => {
     const iw = studio.imageW || page.w;
     const ih = studio.imageH || page.h;
@@ -143,6 +147,98 @@
       x: Math.round((p.x - r.x) / r.scale),
       y: Math.round((p.y - r.y) / r.scale),
     };
+  }
+
+  // ── field-mask painting (grayscale canvas over the source image) ──────────
+  let paintCanvas = $state<HTMLCanvasElement | null>(null);
+  let paintInited = false;
+  let paintingStroke = false;
+  let lastPaint: { x: number; y: number } | null = null;
+
+  $effect(() => {
+    if (studio.fieldPaint && paintCanvas) {
+      if (!paintInited) {
+        const ctx = paintCanvas.getContext("2d")!;
+        ctx.fillStyle = "#808080"; // mid-gray = neutral for most bindings
+        ctx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
+        paintInited = true;
+      }
+    } else {
+      paintInited = false;
+    }
+  });
+
+  function paintPos(e: PointerEvent) {
+    const rect = paintCanvas!.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (paintCanvas!.width / rect.width),
+      y: (e.clientY - rect.top) * (paintCanvas!.height / rect.height),
+    };
+  }
+
+  function paintStamp(x: number, y: number) {
+    const fp = studio.fieldPaint;
+    if (!fp || !paintCanvas) return;
+    const ctx = paintCanvas.getContext("2d")!;
+    const r = Math.max(2, fp.brush);
+    const v = Math.round(fp.value * 255);
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${v},${v},${v},0.85)`);
+    g.addColorStop(1, `rgba(${v},${v},${v},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function paintDown(e: PointerEvent) {
+    if (!studio.fieldPaint) return;
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    paintingStroke = true;
+    const p = paintPos(e);
+    paintStamp(p.x, p.y);
+    lastPaint = p;
+  }
+
+  function paintMove(e: PointerEvent) {
+    if (!paintingStroke || !lastPaint) return;
+    const p = paintPos(e);
+    const d = Math.hypot(p.x - lastPaint.x, p.y - lastPaint.y);
+    const step = Math.max(2, (studio.fieldPaint?.brush ?? 20) / 4);
+    for (let t = step; t < d; t += step) {
+      paintStamp(
+        lastPaint.x + ((p.x - lastPaint.x) * t) / d,
+        lastPaint.y + ((p.y - lastPaint.y) * t) / d,
+      );
+    }
+    paintStamp(p.x, p.y);
+    lastPaint = p;
+  }
+
+  function paintUp(e: PointerEvent) {
+    paintingStroke = false;
+    lastPaint = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  }
+
+  function paintClear() {
+    if (!paintCanvas) return;
+    const ctx = paintCanvas.getContext("2d")!;
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
+  }
+
+  async function paintSave() {
+    if (!paintCanvas || !studio.fieldPaint) return;
+    const name = studio.fieldPaint.name.trim() || "Field mask";
+    await api.createFieldMask(name, paintCanvas.toDataURL("image/png"));
+    studio.fieldPaint = null;
+  }
+
+  function paintCancel() {
+    studio.fieldPaint = null;
   }
 
   function regionDown(e: PointerEvent) {
@@ -699,6 +795,18 @@
           {#if studio.regionDraftMask}
             <img class="region-mask-preview" src={studio.regionDraftMask} alt="" />
           {/if}
+          {#if studio.fieldPaint}
+            <canvas
+              class="field-paint-canvas"
+              bind:this={paintCanvas}
+              width={studio.imageW || 800}
+              height={studio.imageH || 800}
+              onpointerdown={paintDown}
+              onpointermove={paintMove}
+              onpointerup={paintUp}
+              onpointercancel={paintUp}
+            ></canvas>
+          {/if}
           {#each studio.regionPositivePoints as point}
             <span
               class="region-point positive"
@@ -931,6 +1039,8 @@
   {#if studio.processing}
     <div class="busy">Processing… {Math.round(studio.progress * 100)}%</div>
   {/if}
+
+  <FieldPaintBar onClear={paintClear} onSave={paintSave} onCancel={paintCancel} />
 </div>
 
 <style>
@@ -1154,6 +1264,15 @@
     mix-blend-mode: multiply;
     filter: sepia(1) saturate(6) hue-rotate(145deg);
     pointer-events: none;
+  }
+  .field-paint-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.55;
+    cursor: crosshair;
+    touch-action: none;
   }
   .region-select-overlay {
     position: absolute;

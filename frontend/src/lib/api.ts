@@ -126,7 +126,7 @@ export const api = {
 
   async boot(generation = beginProjectGeneration()) {
     try {
-      const [list, gens, area, pens, settings, plotJob, composition, projects, regions, segStatus] = await Promise.all([
+      const [list, gens, area, pens, settings, plotJob, composition, projects, regions, segStatus, fieldMasks] = await Promise.all([
         jget("/api/pfm/list"),
         jget("/api/generate/list"),
         jget("/api/area"),
@@ -137,6 +137,7 @@ export const api = {
         jget("/api/projects"),
         jget("/api/regions"),
         jget("/api/segmentation/status"),
+        jget("/api/fields"),
       ]);
       if (!isCurrentProject(generation)) return false;
       studio.pfms = list.pfms;
@@ -151,6 +152,7 @@ export const api = {
       this.applyComposition(composition);
       this.applyProject(projects);
       this.applyRegions(regions);
+      studio.fieldMasks = fieldMasks?.field_masks ?? [];
       studio.segmentationStatus = segStatus;
       this.watchSamSetup();
       await this.selectPfm(studio.pfmId, generation);
@@ -522,6 +524,20 @@ export const api = {
     const j = await jpost(`/api/regions/${id}`, undefined, "DELETE");
     this.applyRegions(j);
     if (studio.selectedRegionId === id) studio.selectedRegionId = j.selected_region_id ?? null;
+  },
+
+  async createFieldMask(name: string, dataUrl: string) {
+    const j = await jpost("/api/fields", { name, image: dataUrl });
+    if (j.field_mask) {
+      studio.fieldMasks = [...studio.fieldMasks, j.field_mask];
+      pushLog(`Saved field mask ${j.field_mask.name}`);
+    }
+    return j.field_mask ?? null;
+  },
+
+  async deleteFieldMask(id: string) {
+    await jpost(`/api/fields/${id}`, undefined, "DELETE");
+    studio.fieldMasks = studio.fieldMasks.filter((m) => m.id !== id);
   },
 
   async uploadImage(file: File) {

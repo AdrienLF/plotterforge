@@ -65,6 +65,7 @@ const CUSTOM_CASES: [string, Record<string, unknown>][] = [
   ["grid_halftone",            {}],
   ["random_stipple",           {}],
   ["streamlines_flow_field",   {}],
+  ["engraving",                {}],
 ];
 
 for (const [pfmId, params] of CUSTOM_CASES) {

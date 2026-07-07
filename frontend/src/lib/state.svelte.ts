@@ -3,6 +3,7 @@ import type {
   CompositionLayerT,
   CompositionT,
   DrawingSetT,
+  FieldMaskT,
   Param,
   PlacementMm,
   PenChange,
@@ -79,6 +80,11 @@ class Studio {
   regionSelecting = $state(false);
   regionPredicting = $state(false);
   segmentationStatus = $state<Record<string, any> | null>(null);
+
+  // painted field masks (grayscale rasters driving spatial parameter fields)
+  fieldMasks = $state<FieldMaskT[]>([]);
+  // Field-mask painting mode (Viewport canvas overlay). null = not painting.
+  fieldPaint = $state<null | { brush: number; value: number; name: string }>(null);
 
   // pens
   drawingSet = $state<DrawingSetT | null>(null);

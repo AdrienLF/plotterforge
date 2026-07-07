@@ -1,10 +1,13 @@
 <script lang="ts">
   import { api } from "../../lib/api";
   import { studio } from "../../lib/state.svelte";
-  import type { LayerDisplayMode, Param, PathfindingStyleT } from "../../lib/types";
+  import type { FieldBinding, LayerDisplayMode, Param, PathfindingStyleT } from "../../lib/types";
+  import FieldBindingEditor from "../FieldBindingEditor.svelte";
   import ParamControl from "../ParamControl.svelte";
 
   let localParams = $state<Record<string, any>>({});
+  let localBindings = $state<Record<string, FieldBinding>>({});
+  let editingBinding = $state<string | null>(null);
   let loadedPfm = $state("");
   let paramKey = "";
   let regionName = $state("Region");
@@ -93,7 +96,9 @@
     const key = `${layer?.id ?? ""}:${style.pfm_id}:${JSON.stringify(style.params ?? {})}:${studio.layerStyleSchema.map((p) => p.name).join(",")}`;
     if (key === paramKey) return;
     paramKey = key;
-    localParams = { ...defaults(studio.layerStyleSchema), ...(style.params ?? {}) };
+    const { field_bindings, ...scalars } = style.params ?? {};
+    localParams = { ...defaults(studio.layerStyleSchema), ...scalars };
+    localBindings = { ...(field_bindings ?? {}) };
   });
 
   function defaults(schema: Param[]) {
@@ -173,7 +178,23 @@
   }
 
   async function commitParams() {
-    await patchStyle({ params: localParams });
+    const params: Record<string, any> = { ...localParams };
+    delete params.field_bindings;
+    if (Object.keys(localBindings).length) params.field_bindings = localBindings;
+    await patchStyle({ params });
+  }
+
+  async function setBinding(name: string, binding: FieldBinding | null) {
+    if (binding) localBindings = { ...localBindings, [name]: binding };
+    else {
+      const { [name]: _gone, ...rest } = localBindings;
+      localBindings = rest;
+    }
+    await commitParams();
+  }
+
+  function startFieldPaint() {
+    studio.fieldPaint = { brush: 40, value: 1.0, name: "Field mask" };
   }
 
   async function generate() {
@@ -307,11 +328,32 @@
             <div class="group">
               <div class="group-title">{group}</div>
               {#each params as p (p.name)}
-                <ParamControl param={p} bind:value={localParams[p.name]} />
+                <ParamControl
+                  param={p}
+                  bind:value={localParams[p.name]}
+                  binding={localBindings[p.name] ?? null}
+                  onEditBinding={p.bindable ? () => (editingBinding = editingBinding === p.name ? null : p.name) : null}
+                />
               {/each}
             </div>
           {/each}
         </div>
+
+        {#if editingBinding && layer}
+          {@const editParam = studio.layerStyleSchema.find((p) => p.name === editingBinding)}
+          {#if editParam}
+            {#key `${layer.id}:${editingBinding}`}
+              <FieldBindingEditor
+                param={editParam}
+                layerId={layer.id}
+                binding={localBindings[editingBinding] ?? null}
+                onChange={(b) => setBinding(editingBinding!, b)}
+                onClose={() => (editingBinding = null)}
+                onPaint={startFieldPaint}
+              />
+            {/key}
+          {/if}
+        {/if}
 
         {#if style.error}
           <p class="error">{style.error}</p>

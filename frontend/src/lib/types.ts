@@ -9,6 +9,35 @@ export interface Param {
   step: number | null;
   choices: string[] | null;
   help: string;
+  bindable?: boolean;
+}
+
+export interface FieldLayer {
+  type: "luminance" | "gradient_mag" | "edge_distance" | "noise" | "radial" | "linear" | "paint";
+  weight: number;
+  scale?: number;
+  octaves?: number;
+  seed?: number;
+  cx?: number;
+  cy?: number;
+  inner?: number;
+  outer?: number;
+  angle?: number;
+  paint_id?: string;
+}
+
+export interface FieldBinding {
+  kind: "scalar" | "orientation";
+  out_min: number;
+  out_max: number;
+  invert: boolean;
+  gamma: number;
+  layers: FieldLayer[];
+}
+
+export interface FieldMaskT {
+  id: string;
+  name: string;
 }
 
 export interface ShapeLayerT {
