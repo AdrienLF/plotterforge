@@ -551,6 +551,13 @@ export const api = {
     studio.fieldMasks = studio.fieldMasks.filter((m) => m.id !== id);
   },
 
+  async renameFieldMask(id: string, name: string) {
+    const j = await jpost(`/api/fields/${id}`, { name }, "PATCH");
+    studio.fieldMasks = studio.fieldMasks.map((m) =>
+      m.id === id ? { ...m, name: j.field_mask?.name ?? name } : m,
+    );
+  },
+
   async uploadImage(file: File) {
     studio.status = `Loading ${file.name}…`;
     try {

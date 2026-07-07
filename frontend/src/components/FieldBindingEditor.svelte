@@ -2,6 +2,7 @@
   // Popover editor for one param's spatial-field binding. Edits a local copy
   // and reports every change up via onChange; the parent owns persistence
   // (commit into pathfinding_style.params.field_bindings).
+  import { api } from "../lib/api";
   import { studio } from "../lib/state.svelte";
   import type { FieldBinding, FieldLayer, Param } from "../lib/types";
   import NumStep from "./NumStep.svelte";
@@ -80,6 +81,24 @@
     return local.layers.find((l) => l.type === type)!;
   }
 
+  async function renameMask(id: string) {
+    const current = studio.fieldMasks.find((m) => m.id === id);
+    const name = window.prompt("Rename field mask", current?.name ?? "");
+    if (name === null) return;
+    await api.renameFieldMask(id, name.trim() || (current?.name ?? "Field mask"));
+  }
+
+  async function deleteMask(id: string) {
+    const current = studio.fieldMasks.find((m) => m.id === id);
+    if (!window.confirm(`Delete field mask “${current?.name ?? id}”? Bindings using it will fall back to neutral gray.`)) return;
+    await api.deleteFieldMask(id);
+    const row = layerRow("paint");
+    if (row.paint_id === id) {
+      row.paint_id = "";
+      commit();
+    }
+  }
+
   const previewUrl = $derived(
     `/api/composition/layers/${layerId}/field-preview?param=${param.name}&v=${previewTick}`,
   );
@@ -137,6 +156,12 @@
                 {/each}
               </select>
               <button type="button" data-tour="paint-btn" onclick={onPaint}>Paint…</button>
+              {#if row.paint_id}
+                <div class="mask-manage">
+                  <button type="button" title="Rename this mask" onclick={() => void renameMask(row.paint_id!)}>Rename</button>
+                  <button type="button" class="danger" title="Delete this mask from the project" onclick={() => void deleteMask(row.paint_id!)}>Delete</button>
+                </div>
+              {/if}
             </div>
           {/if}
         {/if}
@@ -227,6 +252,18 @@
   .opts.paint {
     display: grid;
     grid-template-columns: 1fr auto;
+  }
+  .mask-manage {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 6px;
+  }
+  .mask-manage button {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+  .mask-manage .danger {
+    color: var(--danger, #e05555);
   }
   .shaping {
     border-top: 1px solid var(--line);

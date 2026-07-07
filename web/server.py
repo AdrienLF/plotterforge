@@ -2728,6 +2728,17 @@ def api_field_mask_png(fid):
         return jsonify(error='Field mask file missing'), 404
     return send_file(path, mimetype='image/png')
 
+@app.route('/api/fields/<fid>', methods=['PATCH'])
+def api_field_mask_rename(fid):
+    mask = _project.get_field_mask(fid)
+    if mask is None:
+        return jsonify(error='Unknown field mask'), 404
+    name = str((request.json or {}).get('name') or '').strip()
+    if name:
+        mask['name'] = name
+        _project.save()
+    return jsonify(ok=True, field_mask={'id': mask['id'], 'name': mask['name']})
+
 @app.route('/api/fields/<fid>', methods=['DELETE'])
 def api_field_mask_delete(fid):
     if not _project.delete_field_mask(fid):

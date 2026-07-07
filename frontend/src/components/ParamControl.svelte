@@ -35,9 +35,11 @@
           type="button"
           class="bind"
           class:bound
-          title={bound ? "Bound to a field — click to edit" : "Bind to a spatial field"}
+          title={bound
+            ? "This value is driven by a spatial field — click to edit the field"
+            : "Drive this value with a spatial field (image tone, noise, gradients, painted mask)"}
           onclick={() => onEditBinding?.()}
-        >◉</button>
+        >◉ {bound ? "field ✓" : "field"}</button>
       {/if}
     </div>
     {#if param.type === "enum"}
@@ -89,16 +91,23 @@
   }
   .bind {
     border: 1px solid var(--line);
+    border-radius: 9px;
     background: transparent;
-    color: var(--muted, #888);
+    color: var(--text-dim, #888);
     font-size: 10px;
     line-height: 1;
-    padding: 2px 5px;
+    padding: 3px 8px;
     cursor: pointer;
+    white-space: nowrap;
+  }
+  .bind:hover {
+    border-color: var(--accent, #6cf);
+    color: var(--text);
   }
   .bind.bound {
-    color: var(--accent, #6cf);
-    border-color: var(--accent, #6cf);
+    color: white;
+    background: var(--accent, #2e8bff);
+    border-color: var(--accent, #2e8bff);
   }
   .bool {
     display: flex;
