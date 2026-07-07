@@ -89,7 +89,7 @@ test("F7: duplicate and delete layer", async ({ page, request, baseURL }) => {
 test("F3: layer X/Y inputs update position in the backend", async ({ page, request, baseURL }) => {
   const id = await setupOneLayer(request, baseURL!, "E2E F3");
   await gotoApp(page);
-  await gotoStep(page, "Composition");
+  await gotoStep(page, "Compose");
 
   // Select the layer so position controls appear.
   await page.locator(".layer .pick").first().click();
@@ -115,7 +115,7 @@ test("F3: layer X/Y inputs update position in the backend", async ({ page, reque
 test("F4: scale % input resizes the layer", async ({ page, request, baseURL }) => {
   const id = await setupOneLayer(request, baseURL!, "E2E F4");
   await gotoApp(page);
-  await gotoStep(page, "Composition");
+  await gotoStep(page, "Compose");
 
   await page.locator(".layer .pick").first().click();
   await expect(page.locator("#layer-scale")).toBeVisible({ timeout: 5_000 });
@@ -134,7 +134,7 @@ test("F4: scale % input resizes the layer", async ({ page, request, baseURL }) =
 test("F5: crop 'To content' sets crop rect; Reset clears it", async ({ page, request, baseURL }) => {
   const id = await setupOneLayer(request, baseURL!, "E2E F5");
   await gotoApp(page);
-  await gotoStep(page, "Composition");
+  await gotoStep(page, "Compose");
 
   // Select the layer so the X/Y/scale/crop controls appear.
   await page.locator(".layer .pick").first().click();

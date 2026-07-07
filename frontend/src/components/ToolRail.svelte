@@ -19,9 +19,9 @@
   <div class="sep"></div>
   <button
     class="icon go"
-    title="Run path finding"
-    disabled={studio.processing || !studio.imageUrl}
-    onclick={() => api.process()}>▶</button
+    title="Regenerate selected layer"
+    disabled={studio.processing || !studio.selectedLayer}
+    onclick={() => void api.generateLayerPathfinding(studio.selectedLayer!.id)}>▶</button
   >
   <div class="sep"></div>
   <button

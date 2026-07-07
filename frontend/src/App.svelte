@@ -57,7 +57,7 @@
     (e.target as HTMLInputElement).value = "";
   }
 
-  type Step = "pathfinding" | "generate" | "composition" | "plot";
+  type Step = "composition" | "generate" | "plot";
   function selectStep(step: Step) {
     studio.step = step;
     if (step === "plot") {
@@ -92,18 +92,14 @@
     {#if studio.step !== "plot"}
       <Panel title="Layers"><CompositionPanel /></Panel>
     {/if}
-    {#if studio.step === "pathfinding"}
-      <Panel title="Drawing Area" open={false}><DrawingAreaPanel /></Panel>
-      <Panel title="Pens"><PensPanel /></Panel>
-      <Panel title="Versions"><VersionsPanel /></Panel>
-    {:else if studio.step === "generate"}
+    {#if studio.step === "generate"}
       <Panel title="Generate"><GeneratePanel /></Panel>
       <Panel title="Drawing Area" open={false}><DrawingAreaPanel /></Panel>
       <Panel title="Pens"><PensPanel /></Panel>
       <Panel title="Versions" open={false}><VersionsPanel /></Panel>
     {:else if studio.step === "composition"}
       <Panel title="Drawing Area" open={false}><DrawingAreaPanel /></Panel>
-      <Panel title="Pens" open={false}><PensPanel /></Panel>
+      <Panel title="Pens"><PensPanel /></Panel>
       <Panel title="Versions" open={false}><VersionsPanel /></Panel>
     {:else}
       <Panel title="Plotter"><PlotterPanel /></Panel>

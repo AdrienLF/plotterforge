@@ -214,7 +214,7 @@ export async function waitForReady(page: Page) {
   await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
 }
 
-/** Click a workflow step tab by its label (Path Finding / Generate / Composition / Plot). */
+/** Click a workflow step tab by its label (Compose / Generate / Plot). */
 export async function gotoStep(page: Page, label: string) {
   await page.getByRole("tab", { name: label }).click();
 }

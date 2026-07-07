@@ -134,7 +134,7 @@
     </button>
     {#if open === "drawing"}
       <div class="items">
-        <button disabled={!studio.imageUrl} onclick={() => run(() => api.process())}>Run path finding</button>
+        <button disabled={!studio.selectedLayer || studio.processing} onclick={() => run(() => void api.generateLayerPathfinding(studio.selectedLayer!.id))}>Regenerate selected layer</button>
         <button disabled={!studio.hasVisibleLayers} onclick={() => run(onPlot)}>Plot…</button>
       </div>
     {/if}

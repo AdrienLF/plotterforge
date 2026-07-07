@@ -96,7 +96,7 @@ class Studio {
   versions = $state<VersionT[]>([]);
 
   // active workspace step
-  step = $state<"pathfinding" | "generate" | "composition" | "plot">("pathfinding");
+  step = $state<"composition" | "generate" | "plot">("composition");
 
   // plotter / machine
   settings = $state<Record<string, any> | null>(null);
