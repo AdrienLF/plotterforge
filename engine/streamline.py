@@ -95,6 +95,13 @@ def place_streamlines(angle: np.ndarray, dark: np.ndarray, p: dict, seed: int) -
     tone = float(p["tone"])
     bright = np.clip(1.0 - dark, 0.0, 1.0)
     spacing = np.clip(min_sp + (max_sp - min_sp) * np.power(bright, 1.0 + tone / 50.0), min_sp, max_sp)
+    binding = (p.get("field_bindings") or {}).get("spacing_scale")
+    ctx = p.get("_field_ctx")
+    if binding and ctx is not None:
+        from .fields import resolve_scalar
+        spacing = np.clip(spacing * resolve_scalar(binding, ctx), 0.25, None).astype(np.float32)
+    elif float(p.get("spacing_scale", 1.0)) != 1.0:
+        spacing = (spacing * float(p.get("spacing_scale", 1.0))).astype(np.float32)
 
     min_len = float(p["min_length"])
     max_len = float(p["max_length"])

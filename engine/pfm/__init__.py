@@ -12,5 +12,6 @@ from . import streamline  # noqa: F401  registers streamline flow/edge/superform
 from . import composite   # noqa: F401  registers layers + mosaic rectangles
 from . import dither      # noqa: F401  registers Floyd-Steinberg dither halftone
 from . import packing     # noqa: F401  registers circle packing
+from . import engrave     # noqa: F401  registers engraving (field-driven streamlines)
 
 __all__ = ["PFM", "REGISTRY", "get", "list_pfms", "register"]

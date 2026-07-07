@@ -81,22 +81,25 @@ def _two_opt(path: np.ndarray, max_n: int = 800, passes: int = 2) -> np.ndarray:
 # ── styles ──────────────────────────────────────────────────────────────────────
 
 def stippling(sites, weights, p, bounds) -> list[Item]:
-    size = float(p.get("stipple_size", 0.9))
+    from .fields import per_point
+    sizes = per_point(p, "stipple_size", sites, 0.9)
     items = []
-    for (x, y), wgt in zip(sites, weights):
-        r = max(0.3, _radius_px(float(wgt), size))
+    for i, ((x, y), wgt) in enumerate(zip(sites, weights)):
+        r = max(0.3, _radius_px(float(wgt), float(sizes[i])))
         items.append(Item(lum=float(wgt), dot=Dot(float(x), float(y), r)))
     return items
 
 
 def dashes(sites, weights, p, bounds) -> list[Item]:
-    size = float(p.get("stipple_size", 0.9))
-    distortion = float(p.get("distortion", 0.0)) / 100.0
+    from .fields import per_point
+    sizes = per_point(p, "stipple_size", sites, 0.9)
+    distortions = per_point(p, "distortion", sites, 0.0) / 100.0
+    base = np.radians(per_point(p, "dash_angle", sites, 0.0))
     rng = np.random.default_rng(0)
     items = []
-    for (x, y), wgt in zip(sites, weights):
-        length = max(0.6, _radius_px(float(wgt), size) * 2.0)
-        ang = rng.uniform(-math.pi, math.pi) * distortion
+    for i, ((x, y), wgt) in enumerate(zip(sites, weights)):
+        length = max(0.6, _radius_px(float(wgt), float(sizes[i])) * 2.0)
+        ang = float(base[i]) + rng.uniform(-math.pi, math.pi) * float(distortions[i])
         dx, dy = math.cos(ang) * length / 2, math.sin(ang) * length / 2
         g = Geometry([(float(x - dx), float(y - dy)), (float(x + dx), float(y + dy))])
         items.append(Item(lum=float(wgt), path=g))
@@ -141,16 +144,18 @@ def _shape_points(kind: str, cx: float, cy: float, r: float, rot: float) -> list
 
 
 def shapes(sites, weights, p, bounds) -> list[Item]:
-    size = float(p.get("fill_size", 100.0))
+    from .fields import per_point
+    sizes = per_point(p, "fill_size", sites, 100.0)
+    rot_mins = np.radians(per_point(p, "min_rotation", sites, 0.0))
+    rot_maxs = np.radians(per_point(p, "max_rotation", sites, 0.0))
     kind = str(p.get("shape_type", "circle"))
     align = bool(p.get("align_rotation", False))
-    rot_min = math.radians(float(p.get("min_rotation", 0.0)))
-    rot_max = math.radians(float(p.get("max_rotation", 0.0)))
     rng = np.random.default_rng(0)
     items = []
-    for (x, y), wgt in zip(sites, weights):
+    for i, ((x, y), wgt) in enumerate(zip(sites, weights)):
         k = rng.choice(_SHAPE_TYPES) if kind == "random" else kind
-        r = max(0.4, _radius_px(float(wgt), 1.8) * size / 100.0)
+        r = max(0.4, _radius_px(float(wgt), 1.8) * float(sizes[i]) / 100.0)
+        rot_min, rot_max = float(rot_mins[i]), float(rot_maxs[i])
         rot = 0.0 if align else rng.uniform(rot_min, rot_max) if rot_max != rot_min else rot_min
         g = Geometry(_shape_points(k, float(x), float(y), r, rot), closed=True)
         items.append(Item(lum=float(wgt), path=g))

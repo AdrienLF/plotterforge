@@ -11,7 +11,7 @@ from flask import (
 from web import obslog
 from web.obslog import WideEvent
 
-from engine import accel, svg_io
+from engine import accel, fields, svg_io
 from engine.canvas import DrawingArea, AREA_PRESETS
 from engine.pens import DrawingSet, PEN_LIBRARIES, library_pens
 from engine.params import schema_json, validate
@@ -2335,7 +2335,14 @@ def _generate_pathfinding_for_layer(layer, data, wide=None):
     _area_from(data.get('area'))
     _drawing_set_from(data.get('drawing_set'))
     pfm = get_pfm(pfm_id)
-    params = validate(pfm.params, data.get('params') or style.get('params') or {})
+    raw_params = data.get('params') or style.get('params') or {}
+    params = validate(pfm.params, raw_params)
+    # Field bindings are a non-scalar sidecar that validate() strips; re-attach
+    # the normalized copy so they persist and round-trip to the UI.
+    field_bindings = fields.normalize_bindings(
+        (raw_params or {}).get('field_bindings'), pfm.params)
+    if field_bindings:
+        params['field_bindings'] = field_bindings
     seed = int(data.get('seed', params.get('seed', 0)) or 0)
     if wide is not None:
         wide.set(pfm_id=pfm_id, region_id=region_id or '-', seed=seed,
@@ -2354,7 +2361,7 @@ def _generate_pathfinding_for_layer(layer, data, wide=None):
     }
     on_progress = wide.wrap_progress() if wide is not None else None
     drawing = pfm.run(img, _project.area, _project.drawing_set, params, seed=seed,
-                      on_progress=on_progress)
+                      on_progress=on_progress, paint_loader=_project.open_field_mask)
     if wide is not None:
         try:  # logging is best-effort — never let metric extraction break generation
             wide.set(shapes=drawing.total(),
@@ -2658,6 +2665,89 @@ def api_regions_mask(region_id):
         return jsonify(error='Region mask missing'), 404
     return send_file(path, mimetype='image/png')
 
+# ── painted field masks (grayscale rasters driving spatial parameter fields) ─
+
+@app.route('/api/fields')
+def api_field_masks():
+    return jsonify(field_masks=[{'id': m['id'], 'name': m['name']}
+                                for m in _project.field_masks])
+
+@app.route('/api/fields', methods=['POST'])
+def api_field_masks_create():
+    data = request.json or {}
+    try:
+        image = _image_from_data_url(data.get('image'))
+    except Exception as exc:
+        return jsonify(error=f'Invalid image: {exc}'), 400
+    mask = _project.add_field_mask(str(data.get('name') or 'Field mask'), image)
+    return jsonify(ok=True, field_mask={'id': mask['id'], 'name': mask['name']})
+
+@app.route('/api/fields/<fid>.png')
+def api_field_mask_png(fid):
+    mask = _project.get_field_mask(fid)
+    if mask is None:
+        return jsonify(error='Unknown field mask'), 404
+    path = _project.dir / mask['path']
+    if not path.exists():
+        return jsonify(error='Field mask file missing'), 404
+    return send_file(path, mimetype='image/png')
+
+@app.route('/api/fields/<fid>', methods=['DELETE'])
+def api_field_mask_delete(fid):
+    if not _project.delete_field_mask(fid):
+        return jsonify(error='Unknown field mask'), 404
+    return jsonify(ok=True)
+
+# Resolved-field preview for the binding editor: grayscale PNG of the param's
+# field over the layer's working raster. Cached per (layer, param, binding).
+_field_preview_cache: dict = {}
+
+@app.route('/api/composition/layers/<layer_id>/field-preview')
+def api_layer_field_preview(layer_id):
+    layer = next((l for l in _composition().layers if l.id == layer_id), None)
+    if layer is None:
+        return jsonify(error='Unknown layer'), 404
+    param_name = request.args.get('param') or ''
+    style = layer.pathfinding_style or {}
+    binding_raw = ((style.get('params') or {}).get('field_bindings') or {}).get(param_name)
+    pfm_id = style.get('pfm_id') or _project.pfm_id
+    if pfm_id not in REGISTRY or not binding_raw:
+        return jsonify(error='No binding for this parameter'), 404
+    pfm = get_pfm(pfm_id)
+    param = next((p for p in pfm.params if p.name == param_name), None)
+    binding = fields.normalize_binding(binding_raw, param) if param else None
+    if binding is None:
+        return jsonify(error='No binding for this parameter'), 404
+    key = (layer_id, param_name, json.dumps(binding, sort_keys=True),
+           _project.image_name)
+    png = _field_preview_cache.get(key)
+    if png is None:
+        import numpy as np
+        region_id = layer.region_id or (layer.source or {}).get('region_id')
+        img = (_project.open_region_image(region_id) if _project.get_region(region_id)
+               else _project.open_image())
+        if img is None:
+            return jsonify(error='No image available'), 404
+        work = _project.area.prepare_image(img)
+        seed = int((style.get('params') or {}).get('seed', 0) or 0)
+        ctx = fields.FieldContext(work, seed, _project.open_field_mask)
+        if binding['kind'] == 'orientation':
+            raster = fields.resolve_orientation(binding, ctx)
+            norm = (raster % np.pi) / np.pi
+        else:
+            raster = fields.resolve_scalar(binding, ctx)
+            lo, hi = binding['out_min'], binding['out_max']
+            norm = (raster - lo) / (hi - lo) if hi > lo else raster * 0
+        from PIL import Image as _Image
+        preview = _Image.fromarray(
+            (np.clip(norm, 0, 1) * 255).astype(np.uint8), 'L')
+        buf = io.BytesIO()
+        preview.save(buf, format='PNG')
+        png = buf.getvalue()
+        _field_preview_cache.clear()      # tiny cache: only the latest preview
+        _field_preview_cache[key] = png
+    return app.response_class(png, mimetype='image/png')
+
 @app.route('/api/pfm/list')
 def api_pfm_list():
     return jsonify(pfms=list_pfms(), backend=accel.backend_name())
@@ -2689,11 +2779,15 @@ def _process_worker(pfm_id, params, seed, region_id=None, request_id=None):
             lambda stage, frac: emit('proc', state='progress', stage=stage, frac=frac))
 
         drawing = pfm.run(img, _project.area, _project.drawing_set,
-                          params, seed=seed, on_progress=on_progress)
+                          params, seed=seed, on_progress=on_progress,
+                          paint_loader=_project.open_field_mask)
         svg = svg_io.to_svg(drawing)
         _drawing = drawing
         _project.pfm_id = pfm_id
         _project.params = validate(pfm.params, params)
+        fb = fields.normalize_bindings((params or {}).get('field_bindings'), pfm.params)
+        if fb:
+            _project.params['field_bindings'] = fb
         layer = _set_workflow_layer(
             svg,
             pfm.name,

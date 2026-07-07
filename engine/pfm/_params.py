@@ -73,12 +73,18 @@ SAMPLER_PARAMS = {
 def style_params(style: str) -> list[Param]:
     if style == "stippling":
         return [Param("stipple_size", "float", 0.9, group="Stippling", min=0.1, max=10,
+                      bindable=True,
                       help="Dot radius in mm at the darkest points (lighter areas shrink down to 30% of this)")]
     if style == "dashes":
         return [
             Param("stipple_size", "float", 0.9, group="Dashes", min=0.1, max=10,
+                  bindable=True,
                   help="Half of the dash length in mm at the darkest points (lighter areas shrink down to 30% of this)"),
+            Param("dash_angle", "angle", 0.0, group="Dashes", min=0, max=360,
+                  bindable=True,
+                  help="Base dash direction; bind a field to steer dashes across the page"),
             Param("distortion", "float", 40.0, group="Dashes", min=0, max=100,
+                  bindable=True,
                   help="Random wobble added to each dash's angle (0 = all dashes point the same way)"),
         ]
     if style == "shapes":
@@ -89,10 +95,13 @@ def style_params(style: str) -> list[Param]:
             Param("align_rotation", "bool", False, group="Shapes",
                   help="Keep every shape upright instead of giving it a random rotation"),
             Param("min_rotation", "angle", 0.0, group="Shapes", min=0, max=360,
+                  bindable=True,
                   help="Low end of the random rotation range, in degrees (ignored when Align Rotation is on)"),
             Param("max_rotation", "angle", 0.0, group="Shapes", min=0, max=360,
+                  bindable=True,
                   help="High end of the random rotation range, in degrees (ignored when Align Rotation is on)"),
             Param("fill_size", "float", 100.0, group="Shapes", min=1, max=400,
+                  bindable=True,
                   help="Shape size as a % of the point spacing"),
         ]
     if style == "triangulation":

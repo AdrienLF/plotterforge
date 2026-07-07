@@ -22,6 +22,9 @@ _STREAM_PARAMS = [
           help="How strongly midtones are pulled toward the dark-area spacing (higher = more of the contrast is packed into the shadows)"),
     Param("distortion", "float", 0.0, group="Streamlines", min=0, max=100,
           help="Random wobble added to each streamline's direction as it's traced"),
+    Param("spacing_scale", "float", 1.0, group="Streamlines", min=0.25, max=4.0,
+          bindable=True,
+          help="Per-pixel multiplier on line spacing; bind a field to vary density independently of tone"),
 ]
 
 _FLOW_PARAMS = [

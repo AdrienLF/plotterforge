@@ -42,6 +42,7 @@ class Project:
         self.composition = Composition()
         self.regions: list[Region] = []
         self.selected_region_id: str | None = None
+        self.field_masks: list[dict] = []   # painted grayscale field masks
         self.pfm_id = "voronoi_stippling"
         self.params: dict[str, Any] = {}
         self.versions: list[Version] = []
@@ -79,6 +80,7 @@ class Project:
             "composition": self.composition.to_dict(),
             "regions": [r.to_dict() for r in self.regions],
             "selected_region_id": self.selected_region_id,
+            "field_masks": self.field_masks,
             "pfm_id": self.pfm_id,
             "params": self.params,
             "versions": [v.to_dict() for v in self.versions],
@@ -103,6 +105,7 @@ class Project:
             p.selected_region_id = d.get("selected_region_id")
             if p.selected_region_id and not p.get_region(p.selected_region_id):
                 p.selected_region_id = None
+            p.field_masks = [dict(m) for m in d.get("field_masks", [])]
             for layer in p.composition.layers:
                 layer_path = p.dir / layer.svg_path if layer.svg_path else None
                 if layer_path and layer_path.exists():
@@ -211,6 +214,45 @@ class Project:
         if image is None or mask is None:
             return None
         return apply_mask_to_alpha(image, mask)
+
+    # ── painted field masks (grayscale, drive spatial parameter fields) ──────
+    def get_field_mask(self, fid: str | None) -> dict | None:
+        if not fid:
+            return None
+        return next((m for m in self.field_masks if m.get("id") == fid), None)
+
+    def add_field_mask(self, name: str, image) -> dict:
+        self.ensure_dirs()
+        fid = f"fm_{uuid.uuid4().hex[:8]}"
+        rel = f"fields/{fid}.png"
+        (self.dir / rel).parent.mkdir(parents=True, exist_ok=True)
+        image.convert("L").save(self.dir / rel)
+        mask = {"id": fid, "name": str(name or "Field mask"), "path": rel}
+        self.field_masks.append(mask)
+        self.save()
+        return mask
+
+    def open_field_mask(self, fid: str | None):
+        mask = self.get_field_mask(fid)
+        if mask is None:
+            return None
+        path = self.dir / mask["path"]
+        if not path.exists():
+            return None
+        with Image.open(path) as img:
+            return img.convert("L")
+
+    def delete_field_mask(self, fid: str) -> bool:
+        mask = self.get_field_mask(fid)
+        if mask is None:
+            return False
+        self.field_masks = [m for m in self.field_masks if m.get("id") != fid]
+        try:
+            (self.dir / mask["path"]).unlink()
+        except FileNotFoundError:
+            pass
+        self.save()
+        return True
 
     # ── source image ─────────────────────────────────────────────────────────
     def set_image(self, data: bytes, filename: str) -> None:

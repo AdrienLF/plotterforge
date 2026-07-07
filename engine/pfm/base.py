@@ -31,10 +31,15 @@ class PFM:
     generate: GenerateFn | None = None  # for grid PFMs
 
     def run(self, image: Image.Image, area: DrawingArea, drawing_set: DrawingSet,
-            values: dict, seed: int = 0, on_progress: Callable | None = None) -> Drawing:
+            values: dict, seed: int = 0, on_progress: Callable | None = None,
+            paint_loader: Callable | None = None) -> Drawing:
         vals = validate(self.params, values)
         seed = int(vals.get("seed", seed) or 0)
         work = area.prepare_image(image)
+        from .. import fields
+        vals["field_bindings"] = fields.normalize_bindings(
+            (values or {}).get("field_bindings"), self.params)
+        vals["_field_ctx"] = fields.FieldContext(work, seed, paint_loader)
         w, h = work.size
         if on_progress:
             on_progress("sampling", 0.1)
@@ -60,10 +65,15 @@ class PFM:
 
 
 def generate_items(pfm: "PFM", work: Image.Image, values: dict, seed: int,
-                   bounds: tuple[int, int]) -> list:
+                   bounds: tuple[int, int],
+                   paint_loader: Callable | None = None) -> list:
     """Run a PFM's generation stage on an already-prepared raster (no
     distribution/clipping). Used by Composite PFMs to invoke other modules."""
     vals = validate(pfm.params, values)
+    from .. import fields
+    vals["field_bindings"] = fields.normalize_bindings(
+        (values or {}).get("field_bindings"), pfm.params)
+    vals["_field_ctx"] = fields.FieldContext(work, seed, paint_loader)
     if pfm.generate is not None:
         return list(pfm.generate(work, vals, seed, bounds))
     sites, weights = SAMPLERS[pfm.family].run(work, vals, seed)

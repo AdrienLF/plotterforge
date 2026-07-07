@@ -26,6 +26,7 @@ class Param:
     step: float | None = None
     choices: list[str] | None = None   # for enum
     help: str = ""
+    bindable: bool = False             # can be driven by a spatial field (engine.fields)
 
     def __post_init__(self) -> None:
         if self.type not in PARAM_TYPES:
@@ -81,6 +82,7 @@ class Param:
             "step": self.step,
             "choices": self.choices,
             "help": self.help,
+            "bindable": self.bindable,
         }
 
 
