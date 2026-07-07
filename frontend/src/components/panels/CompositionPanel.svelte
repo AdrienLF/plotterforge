@@ -128,7 +128,7 @@
           <button class="pick" onclick={() => api.selectLayer(layer.id)}>
             <span>
               {layer.name}
-              {#if layer.source?.bridge === "cavalry" && layer.source?.live}
+              {#if layer.source?.bridge === "cavalry" && layer.source?.live && layer.source?.session && studio.cavalryConnectedSessions.has(layer.source.session)}
                 <i class="live">LIVE</i>
               {/if}
             </span>
@@ -154,6 +154,9 @@
               aria-label={`Path finding settings for ${layer.name}`}
               onclick={() => openStyle(layer.id)}
             >⚙</button>
+            {#if layer.source?.bridge === "cavalry"}
+              <button title="Reconnect to live Cavalry (rebind this layer to the running script)" aria-label={`Reconnect ${layer.name} to live Cavalry`} onclick={() => api.cavalryReconnect(layer.id)}>⟳</button>
+            {/if}
             <button title="Move up" aria-label={`Move ${layer.name} up`} onclick={() => api.moveLayer(layer.id, 1)}>↑</button>
             <button title="Move down" aria-label={`Move ${layer.name} down`} onclick={() => api.moveLayer(layer.id, -1)}>↓</button>
             <button title="Duplicate" aria-label={`Duplicate ${layer.name}`} onclick={() => api.duplicateLayer(layer.id)}>⧉</button>

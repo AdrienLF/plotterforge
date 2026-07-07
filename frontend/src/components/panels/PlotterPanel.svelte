@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "../../lib/api";
+  import { plotPlayback } from "../../lib/plotPlayback.svelte";
   import { PAPER_PRESETS } from "../../lib/placement";
   import { pushLog, studio } from "../../lib/state.svelte";
   import NumStep from "../NumStep.svelte";
@@ -8,6 +9,7 @@
   const macPty = "/Users/adrien/.idraw-tty";
   const tabs = [
     ["estimate", "Estimate"],
+    ["preview", "Preview"],
     ["setup", "Setup"],
     ["speed", "Speed"],
     ["timing", "Pen Timing"],
@@ -69,6 +71,14 @@
   async function refreshEstimate() {
     await run("estimate", async () => {
       await api.refreshEstimate();
+    });
+  }
+
+  async function loadPreview() {
+    await run("preview", async () => {
+      if (!studio.settings) return;
+      const payload = await api.fetchPlotPreview();
+      if (payload) plotPlayback.load(payload, studio.settings);
     });
   }
 
@@ -204,6 +214,65 @@
           <div><span>Pen motion</span><strong>{fmtSeconds(studio.plotEstimate?.breakdown.pen_seconds)}</strong></div>
           <div><span>Copy delays</span><strong>{fmtSeconds(studio.plotEstimate?.breakdown.copy_delay_seconds)}</strong></div>
         </div>
+      </div>
+    {:else if studio.plotterTab === "preview"}
+      <div class="preview col">
+        {#if !plotPlayback.loaded}
+          <button
+            class="primary"
+            onclick={loadPreview}
+            disabled={busy !== "" || !studio.hasVisibleLayers}
+          >
+            {busy === "preview" ? "Loading…" : "Load preview"}
+          </button>
+          {#if plotPlayback.error}
+            <div class="preview-error">{plotPlayback.error}</div>
+          {/if}
+        {:else}
+          <div class="transport">
+            <button
+              class="primary"
+              onclick={() => (plotPlayback.playing ? plotPlayback.pause() : plotPlayback.play())}
+            >
+              {plotPlayback.playing ? "Pause" : "Play"}
+            </button>
+            <select
+              value={plotPlayback.speed}
+              onchange={(e) => plotPlayback.setSpeed(Number((e.target as HTMLSelectElement).value))}
+            >
+              <option value="1">1×</option>
+              <option value="5">5×</option>
+              <option value="20">20×</option>
+              <option value="100">100×</option>
+            </select>
+            <button onclick={loadPreview} disabled={busy !== ""}>Reload</button>
+          </div>
+          <div class="scrubber">
+            <input
+              type="range"
+              min="0"
+              max={plotPlayback.totalTime}
+              step="0.01"
+              value={plotPlayback.currentTime}
+              oninput={(e) => plotPlayback.seek(Number((e.target as HTMLInputElement).value))}
+            />
+            {#each plotPlayback.markers as m}
+              <span
+                class="pen-tick"
+                style:left={`${plotPlayback.totalTime ? (m.t / plotPlayback.totalTime) * 100 : 0}%`}
+                style:background={m.colour}
+                title={m.name}
+              ></span>
+            {/each}
+          </div>
+          <div class="times">
+            <span>{fmtSeconds(plotPlayback.currentTime)}</span>
+            <span>{fmtSeconds(plotPlayback.totalTime)}</span>
+          </div>
+          {#if plotPlayback.copies > 1}
+            <div class="copies-note">Showing 1 of {plotPlayback.copies} copies</div>
+          {/if}
+        {/if}
       </div>
     {:else if studio.plotterTab === "setup"}
       <div class="col">
@@ -584,5 +653,47 @@
   }
   .check input {
     width: auto;
+  }
+  .preview {
+    gap: 8px;
+  }
+  .preview-error {
+    color: var(--danger, #e66);
+    font-size: 11px;
+  }
+  .transport {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 5px;
+    align-items: center;
+  }
+  .transport select {
+    width: auto;
+  }
+  .scrubber {
+    position: relative;
+  }
+  .scrubber input {
+    width: 100%;
+  }
+  .pen-tick {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    height: 10px;
+    transform: translateX(-1px);
+    border: 1px solid var(--panel);
+    pointer-events: none;
+  }
+  .times {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-dim);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .copies-note {
+    color: var(--text-dim);
+    font-size: 11px;
   }
 </style>

@@ -101,6 +101,9 @@ class CavalryBridgeTest(unittest.TestCase):
     def decide(self, action):
         return self.client.post("/api/cavalry/session", json={"action": action})
 
+    def reconnect(self, layer_id):
+        return self.client.post("/api/cavalry/reconnect", json={"layer_id": layer_id})
+
     def add_layer_via_button(self):
         return self.client.post("/api/composition/cavalry-layer")
 
@@ -160,6 +163,24 @@ class CavalryBridgeTest(unittest.TestCase):
         self.post(session=session)
         return self.comp.layers[0]
 
+    def test_live_frames_preserve_user_crop_and_mask(self):
+        # A live capture the user has masked must stay masked across frames — even
+        # when normalize_svg_to_page nudges the layer size (letterbox of a changing
+        # viewBox). Clearing it wiped the mask every frame, so the plot ran
+        # unmasked while a preview snapped in the masked window looked correct.
+        layer = self._capture_layer("aaa")
+        layer.mask = {"type": "rect", "x": 0, "y": 0, "width": 50, "height": 100}
+        layer.crop = {"x": 1, "y": 2, "width": 10, "height": 20}
+        # Next frame with a different aspect → different normalized size.
+        r = self.post(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+            '<path d="M0 0 L100 0" stroke="#000"/></svg>',
+            session="aaa",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(layer.mask, {"type": "rect", "x": 0, "y": 0, "width": 50, "height": 100})
+        self.assertEqual(layer.crop, {"x": 1, "y": 2, "width": 10, "height": 20})
+
     def test_new_session_prompts_instead_of_overwriting(self):
         layer = self._capture_layer("aaa")
         old_svg = layer.svg
@@ -204,6 +225,34 @@ class CavalryBridgeTest(unittest.TestCase):
         # Further posts from bbb still park but keep quiet.
         r2 = self.post(session="bbb")
         self.assertEqual(r2.status_code, 202)
+
+    def test_reconnect_after_dismiss_rebinds_parked_frame(self):
+        layer = self._capture_layer("aaa")  # live on session aaa
+        self.post(CAVALRY_SVG.replace("L1080 0", "L7 0"), session="bbb")
+        self.decide("dismiss")              # dismissed=bbb, pending cleared
+        # bbb keeps posting → parks silently.
+        self.post(CAVALRY_SVG.replace("L1080 0", "L9 0"), session="bbb")
+        r = self.reconnect(layer.id)
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(server._cavalry_dismissed)
+        self.assertIsNone(server._cavalry_pending)
+        self.assertTrue(layer.source["live"])
+        self.assertEqual(layer.source["session"], "bbb")
+        self.assertIn("L9 0", layer.svg)    # adopted the parked frame
+
+    def test_reconnect_without_parked_frame_unbinds_session(self):
+        layer = self._capture_layer("aaa")  # pending is None (aaa flowed in)
+        r = self.reconnect(layer.id)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(layer.source["live"])
+        self.assertIsNone(layer.source["session"])  # next frame (any session) binds
+        self.post(session="zzz")
+        self.assertEqual(layer.source["session"], "zzz")
+
+    def test_reconnect_unknown_layer_is_404(self):
+        self.add_layer_via_button()
+        r = self.reconnect("no-such-id")
+        self.assertEqual(r.status_code, 404)
 
     def test_decision_without_pending_is_conflict(self):
         r = self.decide("new")

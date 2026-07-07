@@ -2,8 +2,15 @@
 
 Composition layers are positioned on the page assuming 1 SVG user-unit = 1 mm
 (see ``engine.composition``). The plot/export pipeline parses the composed SVG
-with *svgelements*, which ignores ``<clipPath>`` — so any crop or mask has to be
-applied as real line clipping, not an SVG clip attribute.
+with *svgelements*, which does not render ``<clipPath>`` — so any crop or mask
+has to be applied as real line clipping, not an SVG clip attribute.
+
+Two clip sources are baked here:
+- app-side ``layer.crop`` / ``layer.mask`` dicts (layer-local mm), and
+- SVG-native ``clip-path="url(#…)"`` groups inside the layer markup (Cavalry's
+  ``renderSVGFrame`` emits masks this way). svgelements resolves the referenced
+  shapes onto ``group.clip_path``; ``iter_drawables_with_clips`` walks the tree
+  and pairs every drawable with its active clip polygons.
 
 This module flattens a layer's SVG to stroked polylines in **layer-local mm**
 (no Y-flip, origin at the layer's top-left), clips them to the crop rectangle
@@ -36,9 +43,10 @@ def _se():
 
 
 def _drawables(svg: str):
+    """Parse ``svg`` and return ``[(element, clip_levels)]`` (see iter_drawables_with_clips)."""
     se = _se()
     doc = se.SVG.parse(_io_for(svg), reify=True)
-    return [el for el in doc.elements() if not isinstance(el, (se.Group, se.SVG))], se
+    return list(iter_drawables_with_clips(doc)), se
 
 
 def _io_for(svg: str):
@@ -54,11 +62,26 @@ def layer_content_bbox(svg: str) -> tuple[float, float, float, float] | None:
     ys0: list[float] = []
     xs1: list[float] = []
     ys1: list[float] = []
-    for el in drawables:
+    for el, clip_levels in drawables:
         try:
             box = el.bbox()
         except Exception:
             box = None
+        if not box:
+            continue
+        # Clip levels shrink the visible extent: intersect with each level's bbox.
+        for lv in prune_clip_levels(clip_levels, box):
+            bbs = [_polygon_bbox(r) for r in lv]
+            lb = (
+                min(b[0] for b in bbs),
+                min(b[1] for b in bbs),
+                max(b[2] for b in bbs),
+                max(b[3] for b in bbs),
+            )
+            box = (max(box[0], lb[0]), max(box[1], lb[1]), min(box[2], lb[2]), min(box[3], lb[3]))
+            if box[0] >= box[2] or box[1] >= box[3]:
+                box = None
+                break
         if not box:
             continue
         x0, y0, x1, y1 = box
@@ -132,6 +155,88 @@ def _flatten_element(el) -> list[list[Point]]:
                 current.append((p.x * PX_TO_MM, p.y * PX_TO_MM))
     push()
     return polylines
+
+
+def _shape_polygon_px(shape) -> list[Point] | None:
+    """Sample a clipPath shape to a polygon ring in px, or None if degenerate."""
+    try:
+        segs = list(shape.segments())
+    except Exception:
+        return None
+    step_px = _STEP_MM / PX_TO_MM
+    pts: list[Point] = []
+    for seg in segs:
+        name = type(seg).__name__
+        if name == "Close":
+            # ponytail: multi-subpath clip shapes (donut holes) are treated as
+            # one ring; split per subpath if that ever matters.
+            continue
+        if name in ("Move", "Line"):
+            p = seg.end
+            pts.append((p.x, p.y))
+            continue
+        try:
+            length = seg.length()
+        except Exception:
+            length = step_px
+        n = max(1, int(length / step_px))
+        for i in range(1, n + 1):
+            p = seg.point(i / n)
+            pts.append((p.x, p.y))
+    return pts if len(pts) >= 3 else None
+
+
+def _rect_ring_contains(ring: list[Point], bbox: tuple[float, float, float, float]) -> bool:
+    """True if ``ring`` is an axis-aligned rectangle whose area contains ``bbox``."""
+    if len(ring) not in (4, 5):
+        return False
+    xs = {round(x, 4) for x, _ in ring}
+    ys = {round(y, 4) for _, y in ring}
+    if len(xs) != 2 or len(ys) != 2:
+        return False
+    return min(xs) <= bbox[0] and min(ys) <= bbox[1] and max(xs) >= bbox[2] and max(ys) >= bbox[3]
+
+
+def prune_clip_levels(levels, bbox):
+    """Drop clip levels that cannot cut geometry with bounding box ``bbox``.
+
+    A level whose union contains an axis-aligned rect ring covering ``bbox``
+    keeps everything — Cavalry wraps whole documents in a full-page rect clip,
+    and pruning it preserves downstream fast paths (native circle arcs).
+    """
+    if bbox is None or not levels:
+        return list(levels)
+    return [lv for lv in levels if not any(_rect_ring_contains(r, bbox) for r in lv)]
+
+
+def iter_drawables_with_clips(doc):
+    """Yield ``(element, clip_levels)`` for every drawable in a parsed SVG tree.
+
+    ``clip_levels`` is one entry per ancestor ``clip-path``; each entry is a
+    list of polygon rings in root px — geometry must stay inside at least one
+    ring of every entry (rings within an entry union, entries intersect).
+
+    Assumes the doc was parsed with ``reify=True`` so leaf geometry is already
+    in root user units. ponytail: clip shapes are taken as userSpaceOnUse in
+    root coordinates (Cavalry puts transforms on leaf paths, not on clipped
+    groups); accumulate ancestor matrices here if a transformed clipped group
+    ever shows up.
+    """
+    se = _se()
+
+    def walk(node, levels):
+        clip = getattr(node, "clip_path", None)
+        if clip:
+            rings = [r for r in (_shape_polygon_px(s) for s in clip) if r]
+            if rings:
+                levels = levels + [rings]
+        if isinstance(node, (se.Group, se.SVG)):
+            for child in node:
+                yield from walk(child, levels)
+        else:
+            yield node, levels
+
+    yield from walk(doc, [])
 
 
 _PATH_TOKEN = re.compile(r"[A-Za-z]|-?\d*\.?\d+(?:[eE][-+]?\d+)?")
@@ -280,12 +385,24 @@ def flattened_clipped_polylines(
     poly_bb = _polygon_bbox(poly) if poly else None
     drawables, _se = _drawables(svg)
     out: list[tuple[list[Point], str, float]] = []
-    for el in drawables:
+    for el, clip_levels in drawables:
+        try:
+            el_bbox = el.bbox()
+        except Exception:
+            el_bbox = None
+        # SVG-native clips (Cavalry masks) in layer-local mm, applied before
+        # the app-side crop/mask/occlusion below.
+        mm_levels = [
+            [[(x * PX_TO_MM, y * PX_TO_MM) for x, y in ring] for ring in lv]
+            for lv in prune_clip_levels(clip_levels, el_bbox)
+        ]
         attrs = _stroke_attrs(el)
         width = getattr(el, "stroke_width", None)
         width_mm = float(width) * PX_TO_MM if width else 0.0
         for line in _flatten_element(el):
             pieces = [line]
+            for lv in mm_levels:
+                pieces = [sub for pl in pieces for ring in lv for sub in clip_polyline_polygon(pl, ring)]
             if rect is not None:
                 pieces = [sub for pl in pieces for sub in clip_polyline(pl, rect)]
             if poly:

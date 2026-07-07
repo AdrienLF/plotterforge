@@ -1,5 +1,6 @@
 import { studio, pushLog, reportError } from "./state.svelte";
-import type { CompositionLayerT, MaskShape, Param, PathfindingStyleT, SegmentationPromptT } from "./types";
+import { plotPlayback } from "./plotPlayback.svelte";
+import type { CompositionLayerT, MaskShape, Param, PathfindingStyleT, PlotPreview, SegmentationPromptT } from "./types";
 
 // Active export request, so the Cancel button can abort it client-side while
 // /api/export/cancel stops the server-side compose.
@@ -190,6 +191,7 @@ export const api = {
     studio.stats = null;
     studio.plotProgress = null;
     studio.plotEstimate = null;
+    plotPlayback.reset();
     studio.processing = false;
     studio.plotting = false;
     studio.progress = 0;
@@ -250,9 +252,14 @@ export const api = {
     }
   },
 
-  applyComposition(payload: any) {
+  applyComposition(payload: any, resetPreview = true) {
     if (payload?.composition) studio.composition = payload.composition;
     if (payload && "svg" in payload) studio.previewSvg = payload.svg;
+    // A user layer change (visibility, geometry, order) invalidates a loaded
+    // preview so it can't show a now-hidden/removed layer. resetPreview=false
+    // for continuous non-user updates (live cavalry frames) that would else
+    // nuke a just-loaded preview every frame.
+    if (resetPreview && (plotPlayback.loaded || plotPlayback.loading)) plotPlayback.reset();
   },
 
   applyRegions(payload: any) {
@@ -264,7 +271,7 @@ export const api = {
 
   async refreshComposition() {
     const j = await jget("/api/composition");
-    this.applyComposition(j);
+    this.applyComposition(j, false);
     return j;
   },
 
@@ -329,6 +336,20 @@ export const api = {
     const j = await jpost("/api/cavalry/session", { action });
     studio.cavalryPrompt = null;
     if (j.composition) this.applyComposition(j);
+    return j;
+  },
+
+  // Re-arm a Cavalry layer as the live target (undoes an earlier "Ignore").
+  async cavalryReconnect(layerId: string) {
+    studio.status = "Reconnecting Cavalry…";
+    const j = await jpost("/api/cavalry/reconnect", { layer_id: layerId });
+    if (j.composition) this.applyComposition(j);
+    // captured → a buffered frame was applied, layer is live now. Otherwise the
+    // layer is armed and the next Cavalry post will bind (nudge a shape to send).
+    studio.cavalryAwaitingSync = !j.captured;
+    studio.status = j.captured
+      ? "Cavalry live — synced"
+      : "Cavalry armed — waiting for next frame (nudge something in Cavalry)";
     return j;
   },
 
@@ -839,6 +860,16 @@ export const api = {
     return j;
   },
 
+  async fetchPlotPreview(): Promise<PlotPreview | null> {
+    const r = await fetch("/api/plot/preview-paths");
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      pushLog("Preview error: " + (j.error || r.statusText));
+      return null;
+    }
+    return j as PlotPreview;
+  },
+
   async refreshPlotJob() {
     const j = await jget("/api/plot/job");
     studio.plotJob = j;
@@ -885,6 +916,34 @@ export const api = {
   },
 };
 
+// ── Cavalry liveness: badge is green only while frames keep arriving ─────────────
+// ponytail: Cavalry posts only on scene change (no heartbeat), so an idle-but-open
+// Cavalry greys out after the timeout and re-greens on the next edit. Add a
+// heartbeat ping to plotter-bridge.js if idle-grey proves annoying.
+const CAVALRY_TIMEOUT_MS = 10_000;
+const cavalrySeenAt = new Map<string, number>();
+
+function markCavalrySeen(session: string) {
+  cavalrySeenAt.set(session, Date.now());
+  if (!studio.cavalryConnectedSessions.has(session)) {
+    studio.cavalryConnectedSessions = new Set([...studio.cavalryConnectedSessions, session]);
+  }
+}
+
+function sweepCavalryConnections() {
+  const now = Date.now();
+  const live = new Set<string>();
+  for (const [s, t] of cavalrySeenAt) {
+    if (now - t < CAVALRY_TIMEOUT_MS) live.add(s);
+    else cavalrySeenAt.delete(s);
+  }
+  const cur = studio.cavalryConnectedSessions;
+  if (live.size !== cur.size || [...live].some((s) => !cur.has(s))) {
+    studio.cavalryConnectedSessions = live;
+  }
+}
+setInterval(sweepCavalryConnections, 2000);
+
 // ── Server-Sent Events: live process + plot progress ────────────────────────────
 export function connectStream() {
   const es = new EventSource("/api/stream");
@@ -898,7 +957,14 @@ export function connectStream() {
     if (m.t === "ping") return;
     if (m.t === "proc") handleProc(m);
     else if (m.t === "log") pushLog(m.msg);
-    else if (m.t === "cavalry") void api.refreshComposition();
+    else if (m.t === "cavalry") {
+      if (studio.cavalryAwaitingSync) {
+        studio.cavalryAwaitingSync = false;
+        studio.status = "Cavalry live — synced";
+      }
+      if (m.session) markCavalrySeen(m.session);
+      void api.refreshComposition();
+    }
     else if (m.t === "cavalry_session")
       studio.cavalryPrompt = { session: m.session, layer_id: m.layer_id ?? null, layer_name: m.layer_name ?? null };
     else if (m.t === "state") {

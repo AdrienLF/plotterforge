@@ -27,6 +27,8 @@ A running list of what this software does. One line each. Updated on every commi
 
 ## Live bridges
 - **Cavalry capture layers** — Add an explicit Cavalry layer, then the Cavalry UI script (`cavalry/plotter-bridge.js`) streams debounced SVG frames into it while preserving its placement. Captures persist with the project; reopening the script asks whether to continue overwriting the live layer, start a new layer, or ignore that session.
+- **Cavalry mask parity** — SVG-native `<clipPath>` masks in captured frames are baked into the plotted geometry (plot preview, plot job, estimate, export), matching what Cavalry and the viewport show. Nested clips intersect; multi-shape clips union; full-page clips are pruned so circles keep native G2 arcs.
+- **Cavalry reconnect** — A ⟳ button on any Cavalry layer re-arms it as the live capture target, undoing an earlier "Ignore this session": it clears the dismissal and rebinds the layer to whatever Cavalry script is currently posting (adopting a parked frame immediately if one is held).
 
 ## Composition (layers)
 - **Layer stack** — Multiple stacked layers, each bound to a region or the whole image; reorder, duplicate, delete, toggle visibility.
@@ -41,6 +43,7 @@ A running list of what this software does. One line each. Updated on every commi
 - **Drawing Area** — Page size, units, orientation, padding, scaling mode, pen-width rescaling.
 - **Drawing Sets (pens)** — Multi-pen sets with colour and per-pen size in mm (stroke width), edited in the Pens panel and reflected in the preview's stroke; items distributed across pens. Pen library presets.
 - **Flat-nib preview** — Mark a pen as a flat/chisel nib (e.g. Pilot Parallel) held at a fixed angle; the on-screen preview approximates the calligraphic mark — full width perpendicular to the nib, thinning to a hairline when travel runs parallel to it. Toggle the whole width/nib preview off in View ▸ Pen width & nib to draw every stroke as a uniform thin line (raw centerline geometry). Preview-only: the exported/plotted SVG stays a plain centerline (the physical nib makes its own width).
+- **Pen matching for imported/Cavalry layers** — Unlabelled `kind:"svg"` layers (raw Cavalry captures, no pen identity) preview and plot per pen: each stroke is colour-matched to the nearest enabled pen (nearest sRGB, effective stroke→fill→black), so it renders at that pen's colour/width, flows through flat-nib preview, and splits into per-pen plot passes and stats. Matching is done live at preview/split time (never baked into the layer), so editing a pen re-matches immediately; existing `inkscape:label`s always win. Fixes multi-pen plots silently dropping masked/Cavalry geometry.
 
 ## Viewport
 - **Pan / zoom / fit** — Wheel zoom, drag pan, one-shot auto-fit, Fit button.
@@ -58,6 +61,7 @@ A running list of what this software does. One line each. Updated on every commi
 - **Multi-layer SVG export** — mm-unit SVG with a viewBox; one Inkscape layer group per pen.
 - **Composition export with progress + cancel** — composing/clipping a multi-layer page reports a per-layer progress bar over SSE and can be canceled mid-run (`/api/export/cancel`); the download runs via fetch with real error handling.
 - **Direct plotting** — Drive the plotter from the app: estimate, plot, pause/resume, discard, stop; live progress over SSE (`/api/stream`).
+- **Plot preview / emulator** — Animate the real plot order on the viewport before running: server returns ordered polylines per pen (`/api/plot/preview-paths`), the client retimes from speed settings (play/pause, 1/5/20/100× speed, timeline scrubber). The drawing is hidden so the animation plays onto a blank page. Travel moves show as faint dashed lines, pens draw in order in their own colours with pen-change markers on the timeline. Geometry mirrors the real plot exactly (only visible layers; crop/mask baked in; whole-SVG unless the drawing uses >1 pen).
 - **Multi-pen plotting** — When a drawing uses more than one pen, the plot splits the SVG per pen and plots one pen at a time in enabled pen-list order: a pre-plot window confirms which pens are used, then between pens the plotter re-homes and a window prompts the operator to swap pens and confirm before continuing (copies nest all-pens-per-copy). Single-pen drawings plot unchanged.
 - **Manual jog** — Manual plotter movement commands (`/api/manual`).
 - **Wireless plotting** — Drive the iDraw from Mac Inkscape over a Tailscale `socat` serial bridge (see `bridge/`).

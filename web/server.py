@@ -22,6 +22,8 @@ from engine.composition import (
     Composition, compose_visible_svg, layer_svg_zip, normalize_svg_to_page,
     parse_svg_size_mm, replace_selected_layer,
 )
+from engine.geometry import clip_polyline_polygon
+from engine.layer_clip import iter_drawables_with_clips, prune_clip_levels
 from engine.regions import mask_bbox
 from engine import project as project_mod
 from engine.project import Project, VersionSnapshotError, get_or_create
@@ -754,22 +756,35 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
     finally:
         os.unlink(tmp)
 
-    drawable = [el for el in svg_doc.elements()
-                if not isinstance(el, (se.Group, se.SVG))]
+    # Each drawable is paired with its active SVG clip-path polygons (Cavalry
+    # masks arrive as <clipPath> groups, which svgelements does not render).
+    drawable = list(iter_drawables_with_clips(svg_doc))
     total_el = len(drawable)
 
     polylines = []
 
-    for idx, element in enumerate(drawable):
+    for idx, (element, clip_levels) in enumerate(drawable):
         if on_progress:
             on_progress(idx, total_el)
         if respect_stop and _stop_event.is_set():
             raise RuntimeError('__stopped__')
 
+        if clip_levels:
+            try:
+                el_bbox = element.bbox()
+            except Exception:
+                el_bbox = None
+            clip_levels = prune_clip_levels(clip_levels, el_bbox)
+        # Clip polygons in machine mm (Y negative = down), matching the
+        # polyline coordinates built below.
+        mm_levels = [[[(x * PX_TO_MM, -(y * PX_TO_MM)) for x, y in ring] for ring in lv]
+                     for lv in clip_levels]
+
         # True circles become a single native G2 arc at plot time. Keep a polygon
         # of points for travel ordering / estimation / resume accounting, and tag
         # it with the arc so the draw loop can replace the segments with one G2.
-        circ = _circle_meta(element, se, PX_TO_MM)
+        # A clipped circle can't stay a native arc — flatten and clip instead.
+        circ = None if mm_levels else _circle_meta(element, se, PX_TO_MM)
         if circ is not None:
             cx, cy, r = circ
             m = min(48, max(12, int(2 * math.pi * r / max(1e-6, step_px * PX_TO_MM))))
@@ -785,13 +800,14 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
         except Exception:
             continue
 
+        el_polys = []
         current = []
         for seg in segs:
             name = type(seg).__name__
 
             if name == 'Move':
                 if len(current) >= 2:
-                    polylines.append(current)
+                    el_polys.append(current)
                 p = seg.end
                 current = [(p.x * PX_TO_MM, -(p.y * PX_TO_MM))]
 
@@ -799,7 +815,7 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
                 if current:
                     current.append(current[0])
                 if len(current) >= 2:
-                    polylines.append(current)
+                    el_polys.append(current)
                 current = []
 
             elif name == 'Line':
@@ -849,7 +865,20 @@ def svg_to_polylines(svg_bytes, settings, on_progress=None, respect_stop=True):
                     current.append((p.x * PX_TO_MM, -(p.y * PX_TO_MM)))
 
         if len(current) >= 2:
-            polylines.append(current)
+            el_polys.append(current)
+
+        if mm_levels:
+            # Rings within a level union (multi-shape clipPath); levels intersect
+            # (nested clip-path groups). ponytail: overlapping rings in one level
+            # may duplicate sub-segments; dedupe if that ever shows on paper.
+            for pl in el_polys:
+                pieces = [pl]
+                for lv in mm_levels:
+                    pieces = [sub for p in pieces for ring in lv
+                              for sub in clip_polyline_polygon(p, ring)]
+                polylines.extend(p for p in pieces if len(p) >= 2)
+        else:
+            polylines.extend(el_polys)
 
     if on_progress:
         on_progress(total_el, total_el)
@@ -1852,14 +1881,14 @@ def _cavalry_live_layer(comp):
     return next((l for l in _cavalry_layers(comp) if l.source.get('live')), None)
 
 def _cavalry_apply(layer, svg):
-    # Update in place: keep x/y/scale (and selection) so user placement of the
-    # capture layer survives every post from Cavalry.
-    w, h = parse_svg_size_mm(svg)
-    if (w, h) != (layer.width, layer.height):
-        # Crop/mask are keyed to the previous geometry.
-        layer.crop = None
-        layer.mask = None
-    layer.width, layer.height = w, h
+    # Update in place: keep x/y/scale, selection, AND the user's crop/mask so a
+    # live capture stays masked/cropped across every frame. normalize_svg_to_page
+    # can nudge the layer size frame-to-frame (letterbox fit of a changing
+    # viewBox); clearing crop/mask on any size change wiped the mask every frame,
+    # so a live layer could never keep one — the plot then ran unmasked while a
+    # preview snapped during the brief masked window looked correct. Crop/mask are
+    # layer-local mm and stay meaningful as the scene animates, so preserve them.
+    layer.width, layer.height = parse_svg_size_mm(svg)
     layer.svg = svg
 
 def _cavalry_arm(comp, layer):
@@ -1890,7 +1919,7 @@ def cavalry_bridge():
         _cavalry_apply(layer, svg)
         _project.save_composition_layers()
         _sync_current_svg_from_composition()
-        emit('cavalry')
+        emit('cavalry', session=session)
         return jsonify(ok=True, layer_id=layer.id)
     # New Cavalry session (or no capture layer): park the frame (latest wins)
     # and ask the user. Re-emit on every post so a freshly opened SPA still
@@ -1934,8 +1963,38 @@ def cavalry_session():
     _cavalry_dismissed = None
     _project.save_composition_layers()
     _sync_current_svg_from_composition()
-    emit('cavalry')
+    emit('cavalry', session=layer.source.get('session'))
     return jsonify(ok=True, layer_id=layer.id, composition=_composition_payload())
+
+@app.route('/api/cavalry/reconnect', methods=['POST'])
+def cavalry_reconnect():
+    """Re-arm a Cavalry layer as the live capture target, even after the user
+    dismissed its session. Clears the dismissal and unbinds the session so the
+    next incoming frame (from whatever script is posting) binds to this layer;
+    if a frame is already parked, adopt it immediately."""
+    global _cavalry_pending, _cavalry_dismissed
+    layer_id = (request.json or {}).get('layer_id')
+    comp = _composition()
+    layer = next((l for l in _cavalry_layers(comp) if l.id == layer_id), None)
+    if layer is None:
+        return jsonify(error='No such Cavalry layer'), 404
+    _cavalry_dismissed = None
+    layer.source.update(live=True, session=None)
+    _cavalry_arm(comp, layer)
+    captured = False
+    if _cavalry_pending is not None:
+        # A dismissed session may still be posting — adopt its latest frame now.
+        layer.source['session'] = _cavalry_pending['session']
+        _cavalry_apply(layer, _cavalry_pending['svg'])
+        _cavalry_pending = None
+        captured = True
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    emit('cavalry', session=layer.source.get('session'))
+    # captured=True → a frame was waiting and is now live; False → armed and
+    # waiting for the next Cavalry post (nothing was buffered).
+    return jsonify(ok=True, layer_id=layer.id, captured=captured,
+                   composition=_composition_payload())
 
 @app.route('/api/placement', methods=['POST'])
 def placement_route():
@@ -1978,6 +2037,57 @@ def plot_pens_route():
     pens = [{'name': p['name'], 'colour': p['colour'], 'shapes': p['shapes']}
             for p in split]
     return jsonify(ok=True, multi=len(pens) > 1, pens=pens)
+
+@app.route('/api/plot/preview-paths')
+def plot_preview_paths():
+    """Ordered polylines (plot order) for the preview emulator, per pen.
+
+    Mirrors /api/plot/estimate: fixed placement + respect_stop=False dodges the
+    stale-_stop_event bug. No timing here — the client retimes from settings so
+    speed changes don't need a round trip. Coords in mm, machine convention
+    (Y negative = down), rounded to 2 decimals."""
+    _ensure_current_svg()
+    if _current_svg is None:
+        return jsonify(error='No SVG loaded'), 400
+    try:
+        settings = cfg.copy()
+        split = _split_svg_pens(_current_svg)
+        # Mirror _create_plot_job exactly: only a >1-pen drawing plots per pen.
+        # A single-pen drawing plots the whole composed SVG — where crop/mask are
+        # already baked into geometry — so preview geometry matches what actually
+        # plots. Report the matched pen's name/colour (not a synthetic 'Pen') so
+        # the emulator legend shows the real pen.
+        if len(split) > 1:
+            entries = [(p['name'], p['colour'], p['svg'].encode('utf-8'))
+                       for p in split]
+        elif split:
+            entries = [(split[0]['name'], split[0]['colour'], _current_svg)]
+        else:
+            entries = [('Pen', '#000000', _current_svg)]
+        pens = []
+        found_any = False
+        for name, colour, svg_bytes in entries:
+            polylines = _placed_polylines(
+                svg_bytes, settings, placement={'x': 0.0, 'y': 0.0},
+                respect_stop=False,
+            )
+            paths = []
+            for poly in polylines:
+                if len(poly) < 2:
+                    continue
+                flat = []
+                for x, y in poly:
+                    flat.append(round(float(x), 2))
+                    flat.append(round(float(y), 2))
+                paths.append(flat)
+            if paths:
+                found_any = True
+            pens.append({'name': name, 'colour': colour, 'paths': paths})
+        if not found_any:
+            return jsonify(error='No paths found in SVG.'), 400
+        return jsonify(ok=True, pens=pens)
+    except Exception as exc:
+        return jsonify(error=str(exc)), 500
 
 @app.route('/api/plot/confirm-pen', methods=['POST'])
 def confirm_pen_route():

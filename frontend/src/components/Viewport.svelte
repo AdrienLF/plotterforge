@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "../lib/api";
-  import { renderFlatNibPreview } from "../lib/flatNib";
+  import { renderFlatNibPreview, penMatchSvg } from "../lib/flatNib";
   import {
     A4_PORTRAIT,
     alignPlacement,
@@ -8,6 +8,7 @@
     type AlignMode,
   } from "../lib/placement";
   import { anchorOffset, effectiveBounds, studio } from "../lib/state.svelte";
+  import { plotPlayback, type Seg } from "../lib/plotPlayback.svelte";
   import type { CompositionLayerT, MaskShape } from "../lib/types";
   import FieldPaintBar from "./FieldPaintBar.svelte";
 
@@ -52,6 +53,96 @@
   });
 
   const selectedLayer = $derived(studio.selectedLayer);
+
+  // ── Plot preview overlay ────────────────────────────────────────────────
+  // When a preview is loaded on the Plot step the drawing is hidden so the
+  // animation plays onto a blank page.
+  const previewActive = $derived(studio.step === "plot" && plotPlayback.loaded);
+  let plotInk: HTMLCanvasElement | undefined = $state();
+  let plotLive: HTMLCanvasElement | undefined = $state();
+  let inkDrawnUpTo = -1; // last segment index committed to the ink canvas
+  let inkLoadGen = -1;
+
+  function applyStyle(ctx: CanvasRenderingContext2D, s: Seg) {
+    if (s.kind === 2) {
+      ctx.strokeStyle = s.colour;
+      ctx.lineWidth = 0.3;
+      ctx.setLineDash([]);
+    } else {
+      ctx.strokeStyle = "rgba(128,128,128,0.35)";
+      ctx.lineWidth = 0.15;
+      ctx.setLineDash([1.5, 1.5]);
+    }
+  }
+
+  // Server Y is negative-down; negate to draw back in top-left mm space.
+  function strokeSeg(ctx: CanvasRenderingContext2D, s: Seg, ex: number, ey: number) {
+    if (s.kind === 0) return; // pause draws nothing
+    applyStyle(ctx, s);
+    ctx.beginPath();
+    ctx.moveTo(s.x0, -s.y0);
+    ctx.lineTo(ex, -ey);
+    ctx.stroke();
+  }
+
+  function drawPlotFrame(t: number, gen: number) {
+    if (!plotInk || !plotLive || !plotPlayback.loaded) return;
+    const ictx = plotInk.getContext("2d");
+    const lctx = plotLive.getContext("2d");
+    if (!ictx || !lctx) return;
+    const T = PX_PER_MM;
+
+    const completed = plotPlayback.segIndexAtOrBefore(t); // last fully-drawn seg
+
+    // Ink layer: append-only, full redraw only on new load or scrub-backward.
+    if (gen !== inkLoadGen || completed < inkDrawnUpTo) {
+      ictx.setTransform(1, 0, 0, 1, 0, 0);
+      ictx.clearRect(0, 0, plotInk.width, plotInk.height);
+      ictx.setTransform(T, 0, 0, T, 0, 0);
+      inkDrawnUpTo = -1;
+      inkLoadGen = gen;
+    }
+    if (completed > inkDrawnUpTo) {
+      ictx.setTransform(T, 0, 0, T, 0, 0);
+      for (let i = inkDrawnUpTo + 1; i <= completed; i++) {
+        const s = plotPlayback.segAt(i);
+        strokeSeg(ictx, s, s.x1, s.y1);
+      }
+      inkDrawnUpTo = completed;
+    }
+
+    // Live layer: cleared every frame — current partial segment + pen dot.
+    lctx.setTransform(1, 0, 0, 1, 0, 0);
+    lctx.clearRect(0, 0, plotLive.width, plotLive.height);
+    lctx.setTransform(T, 0, 0, T, 0, 0);
+    const cur = completed + 1;
+    let dotX = 0, dotY = 0, dotColour = "#000000";
+    if (cur < plotPlayback.segCount) {
+      const s = plotPlayback.segAt(cur);
+      const dur = s.t1 - s.t0;
+      const f = dur <= 0 ? 1 : Math.min(1, Math.max(0, (t - s.t0) / dur));
+      const ex = s.x0 + (s.x1 - s.x0) * f;
+      const ey = s.y0 + (s.y1 - s.y0) * f;
+      strokeSeg(lctx, s, ex, ey);
+      dotX = ex; dotY = ey; dotColour = s.colour;
+    } else if (completed >= 0) {
+      const s = plotPlayback.segAt(completed);
+      dotX = s.x1; dotY = s.y1; dotColour = s.colour;
+    }
+    lctx.setLineDash([]);
+    lctx.fillStyle = dotColour;
+    lctx.beginPath();
+    lctx.arc(dotX, -dotY, 0.6, 0, Math.PI * 2);
+    lctx.fill();
+  }
+
+  $effect(() => {
+    // Re-run on time, load, or page-size change.
+    const t = plotPlayback.currentTime;
+    const gen = plotPlayback.loadGeneration;
+    void page.w; void page.h;
+    if (previewActive) drawPlotFrame(t, gen);
+  });
 
   const drawingSize = $derived.by(() => {
     if (!selectedLayer) return { w: page.w, h: page.h };
@@ -349,23 +440,39 @@
   // pan/zoom just composites a bitmap (GPU) instead of re-painting every path per
   // frame. Resolution is the layout size; zooming in blurs like any raster — the
   // explicit trade for a usable viewport.
+  // penMatchSvg (offscreen DOM + curve sampling) and renderFlatNibPreview are
+  // expensive on dense Cavalry layers, and layerPathsUrl re-runs on every render
+  // (pan/zoom included). Memoize the built data-URL per layer, keyed by the only
+  // inputs that change it — recompute only when svg / pens / toggle actually move.
+  const pathsUrlCache = new Map<string, { key: string; url: string }>();
+
   function layerPathsUrl(layer: CompositionLayerT) {
-    // Flat-nib preview is client-only and never written back — see lib/flatNib.
-    // Only engine-generated layers emit the plain "M x,y L x,y" centerlines the
-    // outline math expects, so skip arbitrary imported kind:"svg" content.
+    // Pen preview is client-only and never written back — see lib/flatNib.
     const pens = studio.drawingSet?.pens ?? [];
+    const penSig = pens
+      .map((p) => `${p.enabled ? 1 : 0}:${p.name}:${p.colour}:${p.stroke_mm}:${p.nib_shape}:${p.start_angle_deg}`)
+      .join("|");
+    const key = `${studio.showPenPreview ? 1 : 0}|${layer.kind}|${penSig}|${layer.svg}`;
+    const hit = pathsUrlCache.get(layer.id);
+    if (hit && hit.key === key) return hit.url;
+
     let svg = layer.svg;
     if (!studio.showPenPreview) {
       // Preview off (View ▸ Pen width & nib): ignore pen width and nib shape,
       // draw every stroke as a uniform thin line so the raw geometry reads
       // clearly. 0.2mm ≈ 0.5px at PX_PER_MM.
       svg = svg.replace(/stroke-width="[^"]*"/g, 'stroke-width="0.2"');
-    } else if (layer.kind !== "svg" && pens.some((p) => p.enabled && p.nib_shape === "flat")) {
-      svg = renderFlatNibPreview(layer.svg, pens);
+    } else {
+      // Unlabelled Cavalry (kind:"svg") carries no pen identity — colour-match
+      // it to pens first so it renders (and flat-nibs) like generator output.
+      if (layer.kind === "svg") svg = penMatchSvg(svg, pens);
+      if (pens.some((p) => p.enabled && p.nib_shape === "flat")) {
+        svg = renderFlatNibPreview(svg, pens);
+      }
     }
-    // ponytail: parse-per-render is fine gated behind a flat pen; memoize by
-    // (layer.svg, pens) only if dense flat drawings measurably lag.
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    pathsUrlCache.set(layer.id, { key, url });
+    return url;
   }
 
   // ── Mask drawing ──────────────────────────────────────────────────────────
@@ -858,6 +965,7 @@
             class="art"
             class:selected={layer.id === studio.composition.selected_layer_id}
             class:show-bounds={studio.showLayerBounds}
+            class:preview-off={previewActive}
             style:left={`${eb.x * PX_PER_MM}px`}
             style:top={`${eb.y * PX_PER_MM}px`}
             style:width={`${eb.width * PX_PER_MM}px`}
@@ -1030,6 +1138,21 @@
             {/if}
           </svg>
         {/if}
+
+        {#if previewActive}
+          <canvas
+            class="plot-ink"
+            bind:this={plotInk}
+            width={page.w * PX_PER_MM}
+            height={page.h * PX_PER_MM}
+          ></canvas>
+          <canvas
+            class="plot-live"
+            bind:this={plotLive}
+            width={page.w * PX_PER_MM}
+            height={page.h * PX_PER_MM}
+          ></canvas>
+        {/if}
       {:else}
         <div class="placeholder">Import an image to begin</div>
       {/if}
@@ -1067,6 +1190,19 @@
   }
   .page.placing {
     cursor: grabbing;
+  }
+  .plot-ink,
+  .plot-live {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+  }
+  .plot-live {
+    z-index: 1;
+  }
+  .art.preview-off {
+    display: none;
   }
   .guide,
   .sheet-mid-v,

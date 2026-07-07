@@ -113,6 +113,12 @@ class Studio {
   previewSvg = $state<string | null>(null);
   stats = $state<Stats | null>(null);
   status = $state("Idle");
+  // Set when a Cavalry layer is re-armed with no buffered frame; the next live
+  // frame clears it and confirms "synced".
+  cavalryAwaitingSync = $state(false);
+  // Cavalry session ids that posted a frame recently — drives the LIVE badge so
+  // it only shows for a layer actually receiving (not a stale/persisted flag).
+  cavalryConnectedSessions = $state<Set<string>>(new Set());
   progress = $state(0);
   processing = $state(false);
   plotting = $state(false);
