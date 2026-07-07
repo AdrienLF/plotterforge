@@ -20,6 +20,20 @@ test("I1: save version appears in the list", async ({ page, request, baseURL }) 
   await expect(page.locator(".ver .name", { hasText: "My snapshot" })).toBeVisible({ timeout: 10_000 });
 });
 
+test("I1b: visible composition can be saved without legacy stats", async ({ page, request, baseURL }) => {
+  await freshProject(request, baseURL!, "E2E I1b");
+  await gotoApp(page);
+
+  await page.locator('input[type="file"]').setInputFiles(join(ASSETS, "sample.svg"));
+
+  const saveVersion = page.getByRole("button", { name: "＋ Save" });
+  await expect(saveVersion).toBeEnabled();
+  await page.locator('input[placeholder="Version name…"]').fill("Composition snapshot");
+  await saveVersion.click();
+
+  await expect(page.locator(".ver .name", { hasText: "Composition snapshot" })).toBeVisible({ timeout: 10_000 });
+});
+
 // I2: loading a saved version restores the drawing and triggers a re-run (status → Ready).
 test("I2: load version restores drawing and re-runs path finding", async ({ page, request, baseURL }) => {
   await withStats(page, request, baseURL!, "E2E I2");

@@ -18,7 +18,7 @@
     <input placeholder="Version name…" bind:value={name} />
     <button
       class="primary"
-      disabled={!studio.stats}
+      disabled={!studio.stats && !studio.composition.layers.some((layer) => layer.visible)}
       title="Save current drawing as a version"
       onclick={save}>＋ Save</button
     >
