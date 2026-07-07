@@ -344,6 +344,17 @@ export const api = {
     await this.refreshEstimate(true);
   },
 
+  async undoComposition() {
+    try {
+      const j = await jpost("/api/composition/undo", {});
+      this.applyComposition(j);
+      pushLog(`Undid ${j.undone ?? "last change"}`);
+      await this.refreshEstimate(true);
+    } catch (e) {
+      pushLog("Nothing to undo");
+    }
+  },
+
   async moveLayer(id: string, direction: number) {
     const j = await jpost(`/api/composition/layers/${id}/move`, { direction });
     this.applyComposition(j);

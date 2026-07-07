@@ -19,8 +19,8 @@ from engine.pfm import REGISTRY, get as get_pfm, list_pfms
 from engine.generate import GENERATORS, get_generator, list_generators
 from engine.genframe import apply_framework
 from engine.composition import (
-    compose_visible_svg, layer_svg_zip, normalize_svg_to_page, parse_svg_size_mm,
-    replace_selected_layer,
+    Composition, compose_visible_svg, layer_svg_zip, normalize_svg_to_page,
+    parse_svg_size_mm, replace_selected_layer,
 )
 from engine.regions import mask_bbox
 from engine import project as project_mod
@@ -247,6 +247,10 @@ def _set_workflow_layer(svg, name, kind, source):
     selected = comp.selected_layer()
     same_side = selected is not None and (selected.kind == 'generate') == (kind == 'generate')
     if same_side:
+        # Generator auto-redraw replaces its own layer constantly — snapshotting
+        # that would flood the undo stack; only guard non-generator replacement.
+        if kind != 'generate' and selected.svg:
+            _push_undo(f'replace “{selected.name}”')
         layer = replace_selected_layer(comp, svg, name=name, kind=kind, source=source)
     else:
         layer = comp.add_layer(svg, name=name, kind=kind, source=source)
@@ -2272,8 +2276,38 @@ def api_add_cavalry_layer():
     _sync_current_svg_from_composition()
     return jsonify(ok=True, composition=_composition_payload())
 
+# ── composition undo ─────────────────────────────────────────────────────────
+# Per-project stack of composition snapshots taken just before destructive
+# operations (layer delete, regenerate-overwrite, generator replace). Kept in
+# memory only — it protects against slips during a session, not history.
+_UNDO_MAX = 10
+_undo_stacks: dict = {}
+
+def _push_undo(label):
+    try:
+        stack = _undo_stacks.setdefault(_project.id, [])
+        stack.append({'label': label,
+                      'composition': _composition().to_dict(include_svg=True)})
+        del stack[:-_UNDO_MAX]
+    except Exception:   # snapshots are best-effort; never block the operation
+        pass
+
+@app.route('/api/composition/undo', methods=['POST'])
+def api_composition_undo():
+    stack = _undo_stacks.get(_project.id) or []
+    if not stack:
+        return jsonify(error='Nothing to undo'), 400
+    snap = stack.pop()
+    _project.composition = Composition.from_dict(snap['composition'])
+    _project.save_composition_layers()
+    _sync_current_svg_from_composition()
+    return jsonify(ok=True, undone=snap['label'], composition=_composition_payload())
+
 @app.route('/api/composition/layers/<layer_id>', methods=['DELETE'])
 def api_delete_layer(layer_id):
+    layer = next((l for l in _composition().layers if l.id == layer_id), None)
+    if layer is not None:
+        _push_undo(f'delete “{layer.name}”')
     if not _composition().delete_layer(layer_id):
         return jsonify(error='Unknown layer'), 404
     _project.save_composition_layers()
@@ -2351,6 +2385,8 @@ def _generate_pathfinding_for_layer(layer, data, wide=None):
     img = _project.open_region_image(region_id) if region else _project.open_image()
     if img is None:
         return None, ('No image available', 404)
+    if layer.svg:
+        _push_undo(f'regenerate “{layer.name}”')
     layer.pathfinding_style = {
         **style,
         'enabled': bool(data.get('enabled', style.get('enabled', True))),

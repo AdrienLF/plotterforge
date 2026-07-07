@@ -68,7 +68,18 @@
   function align(mode: AlignMode) {
     viewport?.align(mode);
   }
+
+  function onKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+      const el = e.target as HTMLElement;
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable) return;
+      e.preventDefault();
+      void api.undoComposition();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div class="app-grid">
   <div class="area-menu"><MenuBar onImport={pickImage} onPlot={() => selectStep("plot")} /></div>

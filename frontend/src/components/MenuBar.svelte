@@ -69,6 +69,24 @@
     {/if}
   </div>
 
+  <div class="menu" class:open={open === "edit"}>
+    <button
+      class="summary"
+      onclick={(e) => {
+        e.stopPropagation();
+        toggle("edit");
+      }}
+      onmouseenter={() => open && (open = "edit")}
+    >
+      Edit
+    </button>
+    {#if open === "edit"}
+      <div class="items">
+        <button onclick={() => run(() => void api.undoComposition())}>Undo layer change <span class="shortcut">⌘Z</span></button>
+      </div>
+    {/if}
+  </div>
+
   <div class="menu" class:open={open === "project"}>
     <button
       class="summary"
@@ -246,6 +264,11 @@
   .check {
     display: inline-block;
     width: 14px;
+  }
+  .shortcut {
+    float: right;
+    color: var(--text-dim);
+    margin-left: 14px;
   }
   .sep {
     height: 1px;
