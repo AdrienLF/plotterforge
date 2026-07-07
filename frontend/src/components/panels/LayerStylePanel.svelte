@@ -3,11 +3,13 @@
   import { studio } from "../../lib/state.svelte";
   import type { FieldBinding, LayerDisplayMode, Param, PathfindingStyleT } from "../../lib/types";
   import FieldBindingEditor from "../FieldBindingEditor.svelte";
+  import PfmPicker from "../PfmPicker.svelte";
   import ParamControl from "../ParamControl.svelte";
 
   let localParams = $state<Record<string, any>>({});
   let localBindings = $state<Record<string, FieldBinding>>({});
   let editingBinding = $state<string | null>(null);
+  let pickerOpen = $state(false);
   let loadedPfm = $state("");
   let paramKey = "";
   let regionName = $state("Region");
@@ -330,6 +332,29 @@
           </select>
         </label>
 
+        <button
+          class="pfm-preview"
+          data-tour="pfm-browse"
+          title="Browse all styles with previews"
+          onclick={() => (pickerOpen = !pickerOpen)}
+        >
+          <img
+            src={`/static/pfm-previews/${style.pfm_id || studio.pfmId}.png`}
+            alt=""
+            onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+          />
+          <span>▦ Browse styles…</span>
+        </button>
+
+        {#if pickerOpen}
+          <PfmPicker
+            current={style.pfm_id || studio.pfmId}
+            groups={pfmGroups}
+            onPick={(id) => void setPfm(id)}
+            onClose={() => (pickerOpen = false)}
+          />
+        {/if}
+
         <div class="params" onchange={commitParams}>
           {#each groups as [group, params]}
             <div class="group">
@@ -595,5 +620,30 @@
       top: 76px;
       width: auto;
     }
+  }
+  .pfm-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 5px 6px;
+    margin: 6px 0 2px;
+    background: none;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .pfm-preview:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .pfm-preview img {
+    width: 34px;
+    height: 46px;
+    object-fit: cover;
+    border-radius: 3px;
+    background: white;
   }
 </style>

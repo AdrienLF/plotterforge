@@ -116,3 +116,15 @@ th { background: var(--panel); font-weight: 600; }
 td:first-child { white-space: nowrap; font-weight: 600; }
 footer { margin-top: 72px; color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
 @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+
+/* algorithm gallery */
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.gallery figure { margin: 0; }
+.gallery img { background: white; aspect-ratio: 105 / 148; object-fit: cover; }
+.gallery figcaption { text-align: center; margin-top: 6px; }
+.gallery.wide { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }

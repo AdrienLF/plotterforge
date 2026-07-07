@@ -17,7 +17,8 @@
   <p class="lede">
     Two ways to make marks: <strong>Path Finding</strong> interprets an image;
     <strong>Generate</strong> draws from pure rules. Both end up as layers you
-    compose and plot.
+    compose and plot. Every preview on this page is the same shaded sphere —
+    so the algorithms compare honestly.
   </p>
 </header>
 
@@ -30,6 +31,16 @@
   the layer redraws.
 </p>
 <p>
+  You can pick from the dropdown, or click <strong>▦ Browse styles…</strong>
+  underneath it for a visual grid — one preview per module:
+</p>
+
+<figure>
+  <img src="img/pfm-picker.png" alt="The style browser: a grid of preview thumbnails, one per path-finding module, grouped by family.">
+  <figcaption>The style browser. Click any preview to switch the layer to that module; your current choice is outlined.</figcaption>
+</figure>
+
+<p>
   Every module has a <strong>Seed</strong>: the same seed reproduces the same
   drawing exactly, a different seed re-rolls the randomness. Parameters marked
   with <strong>◉</strong> can be driven spatially — see
@@ -39,39 +50,59 @@
 <h3>Point modules: sampler × style</h3>
 <p>
   The biggest group places <em>points</em> where the image is dark, then draws
-  something at or between them. You choose both halves independently — four
-  samplers × seven styles:
+  something at or between them. You choose both halves independently. First,
+  the seven <strong>styles</strong> — what gets drawn (shown here with the
+  Voronoi sampler):
 </p>
-<table>
-  <tr><th>Sampler</th><th>Character</th></tr>
-  <tr><td>Voronoi</td><td>Points relax into beautifully even spacing (weighted Lloyd). The classic stipple engine; density and contrast knobs.</td></tr>
-  <tr><td>Adaptive</td><td>Spacing follows tone directly between a min and max radius. Fast, direct, great default.</td></tr>
-  <tr><td>LBG</td><td>Dots split and merge until their sizes settle to local tone — halftone-like discipline.</td></tr>
-  <tr><td>Poisson</td><td>Blue-noise dart throwing: organic, never clumpy, spacing between two radii.</td></tr>
-</table>
-<table>
-  <tr><th>Style</th><th>Draws</th></tr>
-  <tr><td>Stippling</td><td>A dot per point; radius follows darkness.</td></tr>
-  <tr><td>Dashes</td><td>A short stroke per point — length from tone, angle steerable (and bindable).</td></tr>
-  <tr><td>Shapes</td><td>A stamped shape per point: circle, square, star, triangle, cross, superellipse, or random.</td></tr>
-  <tr><td>Triangulation</td><td>The Delaunay web between points — crystalline mesh.</td></tr>
-  <tr><td>Tree</td><td>The minimum spanning tree — a single branching organism.</td></tr>
-  <tr><td>Diagram</td><td>Voronoi cell walls — cracked-earth / dragonfly-wing look.</td></tr>
-  <tr><td>TSP</td><td>One continuous line visiting every point — the classic single-line portrait.</td></tr>
-</table>
 
-<h3>Line & texture modules</h3>
-<table>
-  <tr><th>Module</th><th>Character</th></tr>
-  <tr><td>Hatch</td><td>Parallel hatching with wave types, variable velocity, optional crosshatch and linked ends.</td></tr>
-  <tr><td>Spiral</td><td>One spiral from the centre, modulated by tone — vinyl-groove portraits.</td></tr>
-  <tr><td>Sketch Lines / Curves / Squares</td><td>Gestural strokes that build tone like pencil scribbles.</td></tr>
-  <tr><td>Streamlines (Flow / Edge / Superformula)</td><td>Evenly-spaced lines traced through a vector field — sinusoidal flow, the image's own edge flow, or a rosette.</td></tr>
-  <tr><td>Engraving</td><td>Copperplate shading: line density from tone, direction from a mixable field (edges + noise + radial), optional crosshatch bands in the shadows. Direction is field-bindable — <a href="fields.html">paint it by hand</a>.</td></tr>
-  <tr><td>Grid / Dither Halftone, Random Stipple</td><td>Screen-like halftones and pure random stipple.</td></tr>
-  <tr><td>Circle Packing</td><td>Circles packed tightly, sized by tone.</td></tr>
-  <tr><td>Layers / Mosaic Rectangles</td><td>Composites: run several modules stacked, or tile the image and give each tile a random module.</td></tr>
-</table>
+<div class="gallery">
+  <figure><img src="../pfm-previews/voronoi_stippling.png" alt="Stippling"><figcaption>Stippling — a dot per point, radius from darkness</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_dashes.png" alt="Dashes"><figcaption>Dashes — short strokes; length from tone, angle steerable</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_shapes.png" alt="Shapes"><figcaption>Shapes — stamped circles, stars, crosses…</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_triangulation.png" alt="Triangulation"><figcaption>Triangulation — the Delaunay web; crystalline mesh</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_tree.png" alt="Tree"><figcaption>Tree — minimum spanning tree; one branching organism</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_diagram.png" alt="Diagram"><figcaption>Diagram — Voronoi cell walls; cracked-earth look</figcaption></figure>
+  <figure><img src="../pfm-previews/voronoi_tsp.png" alt="TSP"><figcaption>TSP — one continuous line through every point</figcaption></figure>
+</div>
+
+<p>
+  Then the four <strong>samplers</strong> — where the points go. Same style
+  (stippling), four different point engines:
+</p>
+
+<div class="gallery">
+  <figure><img src="../pfm-previews/voronoi_stippling.png" alt="Voronoi sampler"><figcaption><strong>Voronoi</strong> — points relax into even spacing (weighted Lloyd); the classic stipple engine</figcaption></figure>
+  <figure><img src="../pfm-previews/adaptive_stippling.png" alt="Adaptive sampler"><figcaption><strong>Adaptive</strong> — spacing follows tone directly between two radii; fast, great default</figcaption></figure>
+  <figure><img src="../pfm-previews/lbg_stippling.png" alt="LBG sampler"><figcaption><strong>LBG</strong> — dots split and merge until sizes settle; halftone discipline</figcaption></figure>
+  <figure><img src="../pfm-previews/poisson_stippling.png" alt="Poisson sampler"><figcaption><strong>Poisson</strong> — blue-noise dart throwing; organic, never clumpy</figcaption></figure>
+</div>
+
+<div class="note">
+  All 4 × 7 combinations exist — <em>Poisson Triangulation</em>,
+  <em>LBG TSP</em>, <em>Adaptive Diagram</em>… the style browser shows every
+  one. The sampler decides the texture's <em>rhythm</em>, the style its
+  <em>vocabulary</em>.
+</div>
+
+<h3>Line &amp; texture modules</h3>
+
+<div class="gallery">
+  <figure><img src="../pfm-previews/hatch.png" alt="Hatch"><figcaption>Hatch — parallel hatching; waves, crosshatch, linked ends</figcaption></figure>
+  <figure><img src="../pfm-previews/spiral.png" alt="Spiral"><figcaption>Spiral — one groove from the centre, modulated by tone</figcaption></figure>
+  <figure><img src="../pfm-previews/sketch_lines.png" alt="Sketch Lines"><figcaption>Sketch Lines — gestural strokes that build tone like pencil</figcaption></figure>
+  <figure><img src="../pfm-previews/sketch_curves.png" alt="Sketch Curves"><figcaption>Sketch Curves — the same, with curved gestures</figcaption></figure>
+  <figure><img src="../pfm-previews/sketch_squares.png" alt="Sketch Squares"><figcaption>Sketch Squares — scribbled square loops</figcaption></figure>
+  <figure><img src="../pfm-previews/streamlines_flow_field.png" alt="Streamlines Flow Field"><figcaption>Streamlines · Flow — even lines through a sinusoidal field</figcaption></figure>
+  <figure><img src="../pfm-previews/streamlines_edge_field.png" alt="Streamlines Edge Field"><figcaption>Streamlines · Edge — lines follow the image's own form</figcaption></figure>
+  <figure><img src="../pfm-previews/streamlines_superformula.png" alt="Streamlines Superformula"><figcaption>Streamlines · Superformula — rosette-guided flow</figcaption></figure>
+  <figure><img src="../pfm-previews/engraving.png" alt="Engraving"><figcaption>Engraving — copperplate shading; density from tone, direction from a mixable field. <a href="fields.html">Steer it by hand</a></figcaption></figure>
+  <figure><img src="../pfm-previews/grid_halftone.png" alt="Grid Halftone"><figcaption>Grid Halftone — screen-like dot grid</figcaption></figure>
+  <figure><img src="../pfm-previews/dither_halftone.png" alt="Dither Halftone"><figcaption>Dither Halftone — Floyd–Steinberg texture</figcaption></figure>
+  <figure><img src="../pfm-previews/random_stipple.png" alt="Random Stipple"><figcaption>Random Stipple — pure random dots, tone-weighted</figcaption></figure>
+  <figure><img src="../pfm-previews/circle_packing.png" alt="Circle Packing"><figcaption>Circle Packing — circles packed tight, sized by tone</figcaption></figure>
+  <figure><img src="../pfm-previews/layers.png" alt="Layers composite"><figcaption>Layers — several modules stacked in one pass</figcaption></figure>
+  <figure><img src="../pfm-previews/mosaic_rectangles.png" alt="Mosaic Rectangles"><figcaption>Mosaic Rectangles — tiles, each drawn by a random module</figcaption></figure>
+</div>
 
 <div class="note">
   <strong>Which one first?</strong> Voronoi Stippling for portraits,
@@ -103,6 +134,12 @@
   generator, adjust, and it redraws live (toggle <em>auto-redraw</em> off for
   heavy settings). The result becomes a normal composition layer.
 </p>
+
+<figure>
+  <img src="img/generate-step.png" alt="The Generate step: generator parameters in the dock and a procedural drawing on the page.">
+  <figcaption>The Generate step: parameters on the right, the drawing updates as you drag. ✦ Generate commits it to a layer.</figcaption>
+</figure>
+
 <table>
   <tr><th>Generator</th><th>What it makes</th></tr>
   <tr><td>Spokes &amp; Circles</td><td>Radiating ray clusters with concentric circles and clean crop-outs — poster-grade geometric pieces, with per-cluster pen cycling.</td></tr>
