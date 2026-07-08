@@ -35,8 +35,11 @@ The chapter will cover:
 
 The manual will avoid protocol details except where they explain artist-visible
 behavior. It will use the existing typography, cards, steps, notes, tables, and
-footer conventions. No new screenshot is required because the authoring window
-has not yet completed its real-Cavalry visual smoke test.
+footer conventions. If the installed Cavalry app can be staged and captured
+cleanly, add real screenshots of the bridge's tessellation authoring controls
+and a finished installed pattern. The written workflow must remain complete
+without the images so GUI automation or capture permissions cannot block the
+documentation.
 
 ### Repository guide
 
@@ -68,10 +71,12 @@ that it remains orientation rather than a second manual.
 - Run the focused documentation contract test and `git diff --check`.
 - Reload `http://localhost:7438/static/docs/index.html` in the in-app browser,
   open the new chapter, and inspect the rendered desktop layout and navigation.
+- When screenshots are captured, verify that they contain no unrelated project
+  data and render legibly at the manual's content width.
 
 ## Non-goals
 
-- No screenshots of unverified Cavalry UI.
+- No generated or mock Cavalry screenshots presented as the real application.
 - No duplicate copy of the full implementation plan.
 - No public plugin SDK or third-party package distribution workflow.
 - No behavioral changes to the tessellation engine, API, or Cavalry script.
