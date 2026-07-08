@@ -27,6 +27,15 @@ def test_slug_is_stable_and_prefixed():
     assert slugify_pattern_name("  Möbius Grid! ") == "tessellation_custom_mobius_grid"
 
 
+def test_slug_distinguishes_names_without_ascii_characters():
+    first = slugify_pattern_name("网格")
+    second = slugify_pattern_name("格子")
+
+    assert first.startswith("tessellation_custom_")
+    assert first != "tessellation_custom_"
+    assert first != second
+
+
 def test_svg_is_flattened_and_normalized_to_bounds():
     state = parse_state_svg(SVG, (0, 0, 100, 100))
     assert state.paths[0].points[0] == pytest.approx((0, 0))

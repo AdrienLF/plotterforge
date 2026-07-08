@@ -2609,8 +2609,17 @@ def api_composition_layer_pathfinding_generate(layer_id):
         return jsonify(error=message, composition=_composition_payload()), 500
     if error:
         message, status = error
+        style = _normalize_pathfinding_style(layer.pathfinding_style)
+        style['status'] = 'error'
+        style['error'] = message
+        layer.pathfinding_style = style
+        # Keep the last good SVG in place: a missing custom PFM prevents
+        # regeneration, but it must not destroy artwork already cached in the
+        # project. Persist only the error state so the UI can explain why Apply
+        # failed while continuing to preview/export the existing layer.
+        _project.save_composition_layers()
         w.emit('error', level=logging.WARNING, error=message)
-        return jsonify(error=message), status
+        return jsonify(error=message, composition=_composition_payload()), status
     _drawing = drawing
     _project.save_composition_layers()
     _sync_current_svg_from_composition()
@@ -3049,6 +3058,16 @@ def api_tessellation_session_finalize(session_id):
 @app.route('/api/tessellations')
 def api_tessellations_list():
     return jsonify(patterns=_tessellation_library.list())
+
+
+@app.route('/static/pfm-previews/<pattern_id>.png')
+def custom_tessellation_preview(pattern_id):
+    if not re.fullmatch(r'tessellation_custom_[a-z0-9_]+', pattern_id or ''):
+        return jsonify(error='Unknown tessellation preview'), 404
+    preview_path = _tessellation_library.root / pattern_id / 'preview.png'
+    if not preview_path.is_file():
+        return jsonify(error='Unknown tessellation preview'), 404
+    return send_file(preview_path, mimetype='image/png')
 
 @app.route('/api/pfm/list')
 def api_pfm_list():

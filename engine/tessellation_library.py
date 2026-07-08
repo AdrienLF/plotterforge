@@ -11,6 +11,7 @@ polylines, rejecting active/external SVG content, and enforcing size limits
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import logging
 import math
@@ -67,6 +68,9 @@ def slugify_pattern_name(name: str) -> str:
     ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
     lowered = ascii_only.lower()
     slug = re.sub(r"[^a-z0-9]+", "_", lowered).strip("_")
+    if not slug:
+        digest = hashlib.sha256((name or "").strip().encode("utf-8")).hexdigest()[:12]
+        slug = f"unicode_{digest}"
     return f"tessellation_custom_{slug}"
 
 

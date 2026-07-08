@@ -86,6 +86,14 @@ class CavalryScriptContractTest(unittest.TestCase):
         self.assertLess(create, state)
         self.assertLess(state, finish)
 
+    def test_bake_guards_composition_and_original_value_reads(self):
+        start = self.script.index("function bakePattern() {")
+        end = self.script.index("var bakeProgress =", start)
+        body = self.script[start:end]
+
+        self.assertLess(body.index("try {"), body.index("compositionResolution()"))
+        self.assertLess(body.index("try {"), body.index("value: api.get("))
+
 
 class NormalizeSvgToPageTest(unittest.TestCase):
     def test_px_viewbox_fits_a3_page(self):

@@ -217,81 +217,87 @@ function restoreBindings(originalValues) {
 }
 
 function bakePattern() {
-  var name = patternName.getText().trim();
-  if (name.length < 1 || name.length > 80) {
-    status.setText("Pattern name must contain 1–80 characters");
-    return;
-  }
-  if (bindings.length === 0) {
-    status.setText("Add at least one numeric parameter");
-    return;
-  }
-
-  var vectors = latticeVectors();
-  var allNumbers = vectors.a.concat(vectors.b);
-  for (var vectorIndex = 0; vectorIndex < allNumbers.length; vectorIndex++) {
-    if (typeof allNumbers[vectorIndex] !== "number" || !isFinite(allNumbers[vectorIndex])) {
-      status.setText("Lattice vectors must contain finite numbers");
-      return;
-    }
-  }
-  var determinant = vectors.a[0] * vectors.b[1] - vectors.a[1] * vectors.b[0];
-  if (!isFinite(determinant) || Math.abs(determinant) < 0.000000001) {
-    status.setText("Lattice vectors must not be collinear");
-    return;
-  }
-
-  var manifestBindings = [];
-  for (var bindingIndex = 0; bindingIndex < bindings.length; bindingIndex++) {
-    var candidate = bindings[bindingIndex];
-    if (
-      typeof candidate.light !== "number" ||
-      !isFinite(candidate.light) ||
-      typeof candidate.dark !== "number" ||
-      !isFinite(candidate.dark)
-    ) {
-      status.setText("All Light and Dark values must be finite numbers");
-      return;
-    }
-    manifestBindings.push({
-      layer_id: candidate.layerId,
-      attribute_id: candidate.attrId,
-      light: candidate.light,
-      dark: candidate.dark,
-      curve: null,
-    });
-  }
-
-  var resolution = compositionResolution();
-  if (
-    !resolution ||
-    resolution.length !== 2 ||
-    !isFinite(resolution[0]) ||
-    !isFinite(resolution[1]) ||
-    resolution[0] <= 0 ||
-    resolution[1] <= 0
-  ) {
-    status.setText("The active composition has no valid resolution");
-    return;
-  }
-  var manifest = {
-    format_version: 1,
-    name: name,
-    lattice: vectors,
-    bounds: [0, 0, resolution[0], resolution[1]],
-    bindings: manifestBindings,
-  };
-
   var originalValues = [];
-  for (var originalIndex = 0; originalIndex < bindings.length; originalIndex++) {
-    originalValues.push({
-      layerId: bindings[originalIndex].layerId,
-      attrId: bindings[originalIndex].attrId,
-      value: api.get(bindings[originalIndex].layerId, bindings[originalIndex].attrId),
-    });
-  }
-
   try {
+    var name = patternName.getText().trim();
+    if (name.length < 1 || name.length > 80) {
+      status.setText("Pattern name must contain 1–80 characters");
+      return;
+    }
+    if (bindings.length === 0) {
+      status.setText("Add at least one numeric parameter");
+      return;
+    }
+
+    var vectors = latticeVectors();
+    var allNumbers = vectors.a.concat(vectors.b);
+    for (var vectorIndex = 0; vectorIndex < allNumbers.length; vectorIndex++) {
+      if (
+        typeof allNumbers[vectorIndex] !== "number" ||
+        !isFinite(allNumbers[vectorIndex])
+      ) {
+        status.setText("Lattice vectors must contain finite numbers");
+        return;
+      }
+    }
+    var determinant = vectors.a[0] * vectors.b[1] - vectors.a[1] * vectors.b[0];
+    if (!isFinite(determinant) || Math.abs(determinant) < 0.000000001) {
+      status.setText("Lattice vectors must not be collinear");
+      return;
+    }
+
+    var manifestBindings = [];
+    for (var bindingIndex = 0; bindingIndex < bindings.length; bindingIndex++) {
+      var candidate = bindings[bindingIndex];
+      if (
+        typeof candidate.light !== "number" ||
+        !isFinite(candidate.light) ||
+        typeof candidate.dark !== "number" ||
+        !isFinite(candidate.dark)
+      ) {
+        status.setText("All Light and Dark values must be finite numbers");
+        return;
+      }
+      manifestBindings.push({
+        layer_id: candidate.layerId,
+        attribute_id: candidate.attrId,
+        light: candidate.light,
+        dark: candidate.dark,
+        curve: null,
+      });
+    }
+
+    var resolution = compositionResolution();
+    if (
+      !resolution ||
+      resolution.length !== 2 ||
+      !isFinite(resolution[0]) ||
+      !isFinite(resolution[1]) ||
+      resolution[0] <= 0 ||
+      resolution[1] <= 0
+    ) {
+      status.setText("The active composition has no valid resolution");
+      return;
+    }
+    var manifest = {
+      format_version: 1,
+      name: name,
+      lattice: vectors,
+      bounds: [0, 0, resolution[0], resolution[1]],
+      bindings: manifestBindings,
+    };
+
+    for (var originalIndex = 0; originalIndex < bindings.length; originalIndex++) {
+      originalValues.push({
+        layerId: bindings[originalIndex].layerId,
+        attrId: bindings[originalIndex].attrId,
+        value: api.get(
+          bindings[originalIndex].layerId,
+          bindings[originalIndex].attrId
+        ),
+      });
+    }
+
     status.setText("Creating tessellation bake…");
     client.post("/api/tessellations/sessions", JSON.stringify(manifest), "application/json");
     if (client.status() !== 200) {

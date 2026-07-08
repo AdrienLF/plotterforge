@@ -140,6 +140,17 @@ class FrontendContractsTest(unittest.TestCase):
             body.index("studio.cavalryPrompt = null"),
         )
 
+    def test_custom_tessellations_use_generic_family_and_preview_discovery(self):
+        panel = (
+            ROOT / "frontend/src/components/panels/LayerStylePanel.svelte"
+        ).read_text(encoding="utf-8")
+        picker = (ROOT / "frontend/src/components/PfmPicker.svelte").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('tessellation: "Tessellation"', panel)
+        self.assertIn('/static/pfm-previews/${item.id}.png', picker)
+
     def test_project_actions_invalidate_older_async_work_and_report_failures(self):
         api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
 
