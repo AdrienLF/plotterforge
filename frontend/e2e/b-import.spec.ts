@@ -13,12 +13,10 @@ test("B2: ToolRail import button triggers file chooser and loads image", async (
   ]);
   await chooser.setFiles(join(ASSETS, "sample.png"));
 
-  await expect(page.locator('button[title="Run path finding"]')).toBeEnabled({ timeout: 15_000 });
   await expect(page.locator(".menubar")).toContainText("sample.png");
 });
 
 // B3: uploading an .svg file routes to a composition SVG layer, not a raster source.
-// Run path finding stays disabled (no imageUrl); Export becomes enabled (layer exists).
 test("B3: SVG upload becomes a composition layer, not a raster source", async ({ page, request, baseURL }) => {
   await freshProject(request, baseURL!, "E2E B3");
   await gotoApp(page);
@@ -26,10 +24,7 @@ test("B3: SVG upload becomes a composition layer, not a raster source", async ({
   await page.locator('input[type="file"]').setInputFiles(join(ASSETS, "sample.svg"));
   await expect(page.locator(".menubar")).toContainText("sample.svg", { timeout: 10_000 });
 
-  // No raster source → Run path finding stays disabled.
-  await expect(page.locator('button[title="Run path finding"]')).toBeDisabled();
-
-  // But a composition layer exists → Export SVG is enabled.
+  // A composition layer exists → Export SVG is enabled.
   await page.getByRole("button", { name: "File" }).click();
   await expect(page.getByRole("button", { name: "Export SVG" })).toBeEnabled();
 });
@@ -42,10 +37,9 @@ test("B4: re-import replaces the raster source", async ({ page, request, baseURL
   await page.locator('input[type="file"]').setInputFiles(join(ASSETS, "sample.png"));
   await expect(page.locator(".menubar")).toContainText("sample.png", { timeout: 10_000 });
 
-  // Re-import (same fixture; what matters is the imageUrl is refreshed and button stays enabled).
+  // Re-import (same fixture; what matters is the imageUrl and source label are refreshed).
   // ponytail: only one raster fixture available; the important invariant is re-import works at all.
   await page.locator('input[type="file"]').setInputFiles(join(ASSETS, "sample.png"));
-  await expect(page.locator('button[title="Run path finding"]')).toBeEnabled({ timeout: 10_000 });
   await expect(page.locator(".menubar")).toContainText("sample.png");
 });
 

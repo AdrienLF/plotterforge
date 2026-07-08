@@ -24,7 +24,7 @@ Testing decisions:
 - **A3 [R]** Rename project persists across reload.
 - **A4 [R]** Delete project: confirmation required; afterwards it's gone and another project is current.
 - **A5 [R]** Persistence across restart: a project with image + layers reloads composition/pens/versions intact after the backend restarts.
-- **A6 [U]** First-run empty state: with no project/image, primary actions (Run path finding, Plot, Export) are disabled and the empty canvas is discoverable.
+- **A6 [U]** First-run empty state: with no layer, primary actions (Regenerate selected layer, Plot, Export) are disabled and the empty canvas is discoverable.
 
 ## Epic B — Image & SVG import
 

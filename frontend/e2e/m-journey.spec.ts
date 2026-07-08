@@ -123,7 +123,10 @@ test("M2: generator-only artwork — generate, version, export", async ({ page, 
     )
     .toBe(0);
   await expect(page.locator(".status .state")).toHaveText("Ready", { timeout: 60_000 });
-  await expect(saveVersion).toBeDisabled();
+  // The restored composition has a visible layer, so saving another version is
+  // allowed even though legacy studio.stats was cleared by the load
+  // (see "fix: allow saving composition versions").
+  await expect(saveVersion).toBeEnabled();
 
   // Export — the restored generated SVG should be a valid document.
   const r = await request.get(`${baseURL}/api/export`);
@@ -142,7 +145,7 @@ test("M3: photo → plot dry-run — import, path finding, estimate, plot to com
   // Import image via UI.
   await importImage(page, join(ASSETS, "sample.png"));
 
-  // Run path finding via UI — waits for SSE "Ready".
+  // Regenerate path finding via UI — waits for SSE "Ready".
   await runPathFinding(page);
 
   // Navigate to Plot step and observe its own estimate request.
@@ -186,7 +189,7 @@ test("M4: new-user happy path — import → run → export reachable in ≤ 5 s
   steps++;
 
   // Step 2: run path finding.
-  await page.locator('button[title="Run path finding"]').click();
+  await page.locator('button[title="Regenerate selected layer"]').click();
   steps++;
   await waitForReady(page);
 

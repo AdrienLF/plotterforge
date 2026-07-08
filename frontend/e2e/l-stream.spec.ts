@@ -9,7 +9,7 @@ test("L1: progress bar visible during path-finding, gone when idle", async ({ pa
   await importImage(page, join(ASSETS, "sample.png"));
 
   // Start path finding without waiting for completion.
-  await page.locator('button[title="Run path finding"]').click();
+  await page.locator('button[title="Regenerate selected layer"]').click();
 
   // The progress bar should appear while studio.processing is true.
   await expect(page.locator(".status .bar")).toBeVisible({ timeout: 10_000 });
@@ -34,14 +34,14 @@ test("L2: status badge reflects GPU/CPU backend", async ({ page, request, baseUR
   expect(badgeText).toContain(backend);
 });
 
-// L4 [U]: progress feedback latency — time from "Run path finding" click to first progress bar.
+// L4 [U]: progress feedback latency — time from Regenerate click to first progress bar.
 test("L4: progress bar appears within 1 s of starting path finding", async ({ page, request, baseURL, recordPerf }) => {
   await freshProject(request, baseURL!, "E2E L4");
   await gotoApp(page);
   await importImage(page, join(ASSETS, "sample.png"));
 
   const t0 = Date.now();
-  await page.locator('button[title="Run path finding"]').click();
+  await page.locator('button[title="Regenerate selected layer"]').click();
 
   // The progress bar (.status .bar) appears as soon as the first SSE progress event arrives.
   await expect(page.locator(".status .bar")).toBeVisible({ timeout: 5_000 });

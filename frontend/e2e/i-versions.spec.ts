@@ -2,12 +2,19 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { test, expect, ASSETS, freshProject, gotoApp, importImage, runPathFinding } from "./fixtures";
 
-/** Run path finding so studio.stats is set (required for the Save button). */
+/** The Versions panel is collapsed by default — expand it so its controls exist. */
+async function openVersionsPanel(page: any) {
+  await page.getByRole("button", { name: "Versions" }).click();
+  await expect(page.locator('input[placeholder="Version name…"]')).toBeVisible();
+}
+
+/** Regenerate path finding so studio.stats is set (required for the Save button). */
 async function withStats(page: any, request: any, baseURL: string, name: string) {
   await freshProject(request, baseURL, name);
   await gotoApp(page);
   await importImage(page, join(ASSETS, "sample.png"));
   await runPathFinding(page);
+  await openVersionsPanel(page);
 }
 
 // I1: saving a named version makes it appear in the Versions panel list.
@@ -25,6 +32,7 @@ test("I1b: visible composition can be saved without legacy stats", async ({ page
   await gotoApp(page);
 
   await page.locator('input[type="file"]').setInputFiles(join(ASSETS, "sample.svg"));
+  await openVersionsPanel(page);
 
   const saveVersion = page.getByRole("button", { name: "＋ Save" });
   await expect(saveVersion).toBeEnabled();

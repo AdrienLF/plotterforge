@@ -39,7 +39,7 @@ test("C3: switch PFM algorithm reloads schema without losing the layer", async (
   await gotoApp(page);
 
   // Open the editor for the layer.
-  await page.getByRole("button", { name: `Open ${add.composition.layers.at(-1).name} path finding` }).click();
+  await page.getByRole("button", { name: `Path finding settings for ${add.composition.layers.at(-1).name}` }).click();
   await expect(page.locator('[aria-label="Layer style"]')).toBeVisible();
 
   // Get current PFM and switch to another.
@@ -48,7 +48,7 @@ test("C3: switch PFM algorithm reloads schema without losing the layer", async (
   const other = pfmList.pfms.find((p: { id: string }) => p.id !== current)?.id;
   if (!other) return; // only one PFM; skip
 
-  const select = page.locator('.layer-style label:has-text("PFM") select');
+  const select = page.locator('select[data-tour="pfm-select"]');
   await select.selectOption(other);
 
   // Layer still exists after switching.
@@ -103,7 +103,7 @@ async function openLayerEditor(request: any, page: any, baseURL: string, name: s
   });
   await gotoApp(page);
   // Open the LayerStylePanel using the layer's accessible action name.
-  await page.getByRole("button", { name: `Open ${layer.name} path finding` }).click();
+  await page.getByRole("button", { name: `Path finding settings for ${layer.name}` }).click();
   await expect(page.locator('[aria-label="Layer style"]')).toBeVisible({ timeout: 5_000 });
   return layerId;
 }

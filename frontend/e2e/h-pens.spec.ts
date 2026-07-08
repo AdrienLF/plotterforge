@@ -67,10 +67,14 @@ test("H5: pen usage % is non-zero after a pathfinding run", async ({ page, reque
   await importImage(page, join(ASSETS, "sample.png"));
   await runPathFinding(page);
 
-  // After runPathFinding the SSE done event sets studio.stats including per_pen counts.
-  // The single default pen should have 100 % of the shapes.
+  // The layer-regenerate response carries stats (per_pen counts) that populate
+  // studio.stats. The single default pen should have 100 % of the shapes.
+  // Poll: the pct spans re-render just after the status flips to Ready.
   const firstPct = page.locator(".pen .pct").first();
-  const pctText = await firstPct.textContent();
-  const pct = parseInt(pctText ?? "0", 10);
-  expect(pct, "usage % should be > 0 after a run").toBeGreaterThan(0);
+  await expect
+    .poll(async () => parseInt((await firstPct.textContent()) ?? "0", 10), {
+      message: "usage % should be > 0 after a run",
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0);
 });

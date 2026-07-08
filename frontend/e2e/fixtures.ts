@@ -1,6 +1,6 @@
 import { test as base, expect, type APIRequestContext, type Page, type Request } from "@playwright/test";
 import { appendFileSync, mkdirSync } from "fs";
-import { dirname, join } from "path";
+import { basename, dirname, join } from "path";
 import { fileURLToPath } from "url";
 import type { CompositionT } from "../src/lib/types";
 
@@ -196,16 +196,17 @@ export async function waitForGeneratedLayer(
   );
 }
 
-/** Import a raster/SVG via the hidden file input (same input the menu/rail use). */
+/** Import a raster and create the selected path-finding layer used by generation journeys. */
 export async function importImage(page: Page, file: string) {
   await page.locator('input[type="file"]').setInputFiles(file);
-  // Run-path-finding enables once studio.imageUrl is set.
-  await expect(page.locator('button[title="Run path finding"]')).toBeEnabled({ timeout: 15_000 });
+  await expect(page.locator(".menubar")).toContainText(basename(file), { timeout: 15_000 });
+  await page.locator('button[data-tour="add-pf"]').click();
+  await expect(page.locator('button[title="Regenerate selected layer"]')).toBeEnabled({ timeout: 15_000 });
 }
 
-/** Run the single-PFM "Run path finding" flow and wait for the SSE result. */
+/** Regenerate the selected path-finding layer and wait for the SSE result. */
 export async function runPathFinding(page: Page) {
-  await page.locator('button[title="Run path finding"]').click();
+  await page.locator('button[title="Regenerate selected layer"]').click();
   await waitForReady(page);
 }
 
