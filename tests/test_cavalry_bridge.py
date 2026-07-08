@@ -61,6 +61,31 @@ class CavalryScriptContractTest(unittest.TestCase):
         for key in ("customAx", "customAy", "customBx", "customBy"):
             self.assertIn(f"var {key} = new ui.NumericField", self.script)
 
+    def test_bake_sweeps_32_states_and_restores_in_finally(self):
+        self.assertIn(
+            "for (var stateIndex = 0; stateIndex < 32; stateIndex++)",
+            self.script,
+        )
+        self.assertIn("var t = stateIndex / 31;", self.script)
+        self.assertIn(
+            "binding.light + t * (binding.dark - binding.light)", self.script
+        )
+        self.assertIn("api.renderSVGFrame(stateStem, 100, true);", self.script)
+        self.assertIn("api.readFromFile(stateStem + '.svg')", self.script)
+        self.assertIn("finally", self.script)
+        self.assertIn("restoreBindings(originalValues);", self.script)
+
+    def test_bake_uses_transaction_endpoints_in_order(self):
+        create = self.script.index('client.post("/api/tessellations/sessions"')
+        state = self.script.index(
+            '"/api/tessellations/sessions/" + sessionId + "/states/"'
+        )
+        finish = self.script.index(
+            '"/api/tessellations/sessions/" + sessionId + "/finalize"'
+        )
+        self.assertLess(create, state)
+        self.assertLess(state, finish)
+
 
 class NormalizeSvgToPageTest(unittest.TestCase):
     def test_px_viewbox_fits_a3_page(self):

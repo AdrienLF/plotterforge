@@ -173,9 +173,184 @@ function compositionResolution() {
   return api.get(api.getActiveComp(), "resolution");
 }
 
+function latticeVectors() {
+  var width = latticeWidth.getValue();
+  var height = latticeHeight.getValue();
+  var preset = latticePreset.getText();
+  if (preset === "Brick") {
+    return { a: [width, 0], b: [width / 2, height] };
+  }
+  if (preset === "Hex/Isometric") {
+    return { a: [width, 0], b: [width / 2, height * 0.8660254038] };
+  }
+  if (preset === "Custom") {
+    return {
+      a: [customAx.getValue(), customAy.getValue()],
+      b: [customBx.getValue(), customBy.getValue()],
+    };
+  }
+  return { a: [width, 0], b: [0, height] };
+}
+
+function responseError(fallback) {
+  var body = client.body();
+  if (!body) return fallback;
+  try {
+    var parsed = JSON.parse(body);
+    return parsed.error || body;
+  } catch (e) {
+    return body;
+  }
+}
+
+function restoreBindings(originalValues) {
+  for (var index = 0; index < originalValues.length; index++) {
+    var original = originalValues[index];
+    var values = {};
+    values[original.attrId] = original.value;
+    try {
+      api.set(original.layerId, values);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+}
+
+function bakePattern() {
+  var name = patternName.getText().trim();
+  if (name.length < 1 || name.length > 80) {
+    status.setText("Pattern name must contain 1–80 characters");
+    return;
+  }
+  if (bindings.length === 0) {
+    status.setText("Add at least one numeric parameter");
+    return;
+  }
+
+  var vectors = latticeVectors();
+  var allNumbers = vectors.a.concat(vectors.b);
+  for (var vectorIndex = 0; vectorIndex < allNumbers.length; vectorIndex++) {
+    if (typeof allNumbers[vectorIndex] !== "number" || !isFinite(allNumbers[vectorIndex])) {
+      status.setText("Lattice vectors must contain finite numbers");
+      return;
+    }
+  }
+  var determinant = vectors.a[0] * vectors.b[1] - vectors.a[1] * vectors.b[0];
+  if (!isFinite(determinant) || Math.abs(determinant) < 0.000000001) {
+    status.setText("Lattice vectors must not be collinear");
+    return;
+  }
+
+  var manifestBindings = [];
+  for (var bindingIndex = 0; bindingIndex < bindings.length; bindingIndex++) {
+    var candidate = bindings[bindingIndex];
+    if (
+      typeof candidate.light !== "number" ||
+      !isFinite(candidate.light) ||
+      typeof candidate.dark !== "number" ||
+      !isFinite(candidate.dark)
+    ) {
+      status.setText("All Light and Dark values must be finite numbers");
+      return;
+    }
+    manifestBindings.push({
+      layer_id: candidate.layerId,
+      attribute_id: candidate.attrId,
+      light: candidate.light,
+      dark: candidate.dark,
+      curve: null,
+    });
+  }
+
+  var resolution = compositionResolution();
+  if (
+    !resolution ||
+    resolution.length !== 2 ||
+    !isFinite(resolution[0]) ||
+    !isFinite(resolution[1]) ||
+    resolution[0] <= 0 ||
+    resolution[1] <= 0
+  ) {
+    status.setText("The active composition has no valid resolution");
+    return;
+  }
+  var manifest = {
+    format_version: 1,
+    name: name,
+    lattice: vectors,
+    bounds: [0, 0, resolution[0], resolution[1]],
+    bindings: manifestBindings,
+  };
+
+  var originalValues = [];
+  for (var originalIndex = 0; originalIndex < bindings.length; originalIndex++) {
+    originalValues.push({
+      layerId: bindings[originalIndex].layerId,
+      attrId: bindings[originalIndex].attrId,
+      value: api.get(bindings[originalIndex].layerId, bindings[originalIndex].attrId),
+    });
+  }
+
+  try {
+    status.setText("Creating tessellation bake…");
+    client.post("/api/tessellations/sessions", JSON.stringify(manifest), "application/json");
+    if (client.status() !== 200) {
+      throw new Error(responseError("Could not create tessellation session"));
+    }
+    var sessionId = JSON.parse(client.body()).session_id;
+    if (!sessionId) {
+      throw new Error("The server did not return a tessellation session");
+    }
+
+    for (var stateIndex = 0; stateIndex < 32; stateIndex++) {
+      var t = stateIndex / 31;
+      for (var linkedIndex = 0; linkedIndex < bindings.length; linkedIndex++) {
+        var binding = bindings[linkedIndex];
+        var stateValues = {};
+        stateValues[binding.attrId] =
+          binding.light + t * (binding.dark - binding.light);
+        api.set(binding.layerId, stateValues);
+      }
+      var stateStem = api.getTempFolder() + "/plotter-tessellation-" + stateIndex;
+      api.renderSVGFrame(stateStem, 100, true);
+      var stateSvg = api.readFromFile(stateStem + '.svg');
+      client.post(
+        "/api/tessellations/sessions/" + sessionId + "/states/" + stateIndex,
+        stateSvg,
+        "image/svg+xml"
+      );
+      if (client.status() !== 200) {
+        throw new Error(responseError("Could not upload state " + stateIndex));
+      }
+      bakeProgress.setValue(stateIndex + 1);
+      status.setText("Baking state " + (stateIndex + 1) + " / 32");
+    }
+
+    client.post(
+      "/api/tessellations/sessions/" + sessionId + "/finalize",
+      "",
+      "application/json"
+    );
+    if (client.status() !== 200) {
+      throw new Error(responseError("Could not install tessellation"));
+    }
+    status.setText("Installed " + name);
+  } catch (e) {
+    status.setText(e && e.message ? e.message : String(e));
+    console.error(e);
+  } finally {
+    restoreBindings(originalValues);
+    bakeProgress.setValue(0);
+  }
+}
+
 var bakeProgress = new ui.ProgressBar();
 bakeProgress.setMaximum(32);
 bakeProgress.setValue(0);
+var bakeTessellation = new ui.Button("Bake tessellation");
+bakeTessellation.onClick = function () {
+  bakePattern();
+};
 
 rebuildBindings();
 tessellationLayout.add(
@@ -184,6 +359,7 @@ tessellationLayout.add(
   customRow,
   addBinding,
   bindingScroll,
+  bakeTessellation,
   bakeProgress
 );
 
