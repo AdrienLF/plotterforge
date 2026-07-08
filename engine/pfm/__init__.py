@@ -5,6 +5,7 @@ from __future__ import annotations
 from .base import PFM, REGISTRY, get, list_pfms, register
 from . import families  # noqa: F401  registers voronoi/lbg/adaptive x styles
 from . import grid      # noqa: F401  registers grid halftone + random stipple
+from . import tessellation  # noqa: F401  registers raster-driven tessellations
 from . import spiral    # noqa: F401  registers spiral
 from . import hatch     # noqa: F401  registers hatch
 from . import sketch    # noqa: F401  registers sketch lines/curves/squares

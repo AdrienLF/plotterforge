@@ -494,6 +494,12 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn("const canBindField =", control)
         self.assertIn("{#if canBindField}", control)
 
+    def test_layer_style_labels_tessellation_family(self):
+        body = (
+            ROOT / "frontend/src/components/panels/LayerStylePanel.svelte"
+        ).read_text(encoding="utf-8")
+        self.assertIn('tessellation: "Tessellation"', body)
+
 
 if __name__ == "__main__":
     unittest.main()

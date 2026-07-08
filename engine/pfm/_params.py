@@ -147,6 +147,7 @@ STYLE_LABELS = {
     "tsp": "TSP",
 }
 
-FAMILY_LABELS = {"voronoi": "Voronoi", "adaptive": "Adaptive", "lbg": "LBG", "poisson": "Poisson"}
+FAMILY_LABELS = {"voronoi": "Voronoi", "adaptive": "Adaptive", "lbg": "LBG",
+                 "poisson": "Poisson", "tessellation": "Tessellation"}
 
 STYLE_ORDER = ["stippling", "dashes", "shapes", "triangulation", "tree", "diagram", "tsp"]

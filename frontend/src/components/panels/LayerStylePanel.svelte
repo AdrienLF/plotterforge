@@ -71,6 +71,7 @@
     dither: "Dither",
     packing: "Packing",
     growth: "Growth",
+    tessellation: "Tessellation",
   };
   // Group PFMs into optgroups by family label. Merge by label (not just
   // contiguous runs): the optgroups are keyed by label, so a family whose
