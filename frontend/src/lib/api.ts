@@ -687,6 +687,9 @@ export const api = {
         draft: Boolean(opts.draft),
       });
       this.applyComposition(j);
+      // The composition-first endpoint returns run stats in the response
+      // (the legacy /api/process flow got them via the SSE "done" event).
+      if (j?.stats) studio.stats = j.stats;
       studio.status = "Ready";
       studio.progress = 1;
       // Don't block "Ready" on the plot-time estimate — it re-parses the whole

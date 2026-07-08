@@ -2594,8 +2594,28 @@ def api_composition_layer_pathfinding_generate(layer_id):
     _drawing = drawing
     _project.save_composition_layers()
     _sync_current_svg_from_composition()
+    # Per-run stats (shape totals + per-pen counts) used to drive the Pens
+    # panel usage % and the status bar, mirroring the legacy /api/process SSE
+    # "done" payload that composition-first regeneration no longer emits.
+    # Best-effort: never fail the request over stats (some PFM doubles used in
+    # tests return minimal drawings without layer metadata).
+    stats = None
+    try:
+        per_pen = [{'name': l.pen.name, 'colour': l.pen.colour, 'count': l.count()}
+                   for l in drawing.layers if l.count()]
+        try:
+            length_mm = round(svg_io.estimate_path_length_mm(drawing))
+        except Exception:
+            length_mm = 0
+        stats = {'total': drawing.total(), 'length_mm': length_mm,
+                 'backend': accel.backend_name(), 'per_pen': per_pen}
+    except Exception:
+        pass
     w.emit('success')
-    return jsonify(ok=True, composition=_composition_payload())
+    payload = {'ok': True, 'composition': _composition_payload()}
+    if stats is not None:
+        payload['stats'] = stats
+    return jsonify(**payload)
 
 @app.route('/api/settings', methods=['GET', 'POST'])
 def settings_route():
