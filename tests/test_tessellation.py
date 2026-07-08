@@ -5,6 +5,7 @@ import pytest
 from PIL import Image
 
 from engine.geometry import Geometry, Item
+from engine.tessellation_patterns import BUILTIN_PATTERNS
 from engine.tessellation import (
     ParameterBinding,
     TessellationPattern,
@@ -156,3 +157,23 @@ def test_deduplicate_rechains_across_epsilon_endpoint_noise():
     out = deduplicate_items(items)
     assert len(out) == 1
     assert len(out[0].path.points) == 3
+
+
+def test_builtins_have_stable_ids_and_32_distinct_endpoints():
+    assert set(BUILTIN_PATTERNS) == {
+        "tessellation_isometric_y", "tessellation_hex_aperture",
+        "tessellation_truchet_weave", "tessellation_diamond_lattice",
+    }
+    for pattern_id, pattern in BUILTIN_PATTERNS.items():
+        assert pattern.id == pattern_id
+        assert len(pattern.states) == 32
+        assert pattern.states[0] != pattern.states[-1]
+
+
+def test_builtins_render_deterministically_and_periodically():
+    work = Image.new("L", (120, 80), 96)
+    for pattern in BUILTIN_PATTERNS.values():
+        first = render_tessellation(work, pattern, {**VALUES, "columns": 6})
+        second = render_tessellation(work, pattern, {**VALUES, "columns": 6})
+        assert first == second
+        assert first
