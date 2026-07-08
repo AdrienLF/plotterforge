@@ -191,6 +191,141 @@ function computeLattice() {
   };
 }
 
+function restoreBindings(originalValues) {
+  bindings.forEach(function (binding, index) {
+    var update = {};
+    update[binding.attrId] = originalValues[index];
+    api.set(binding.layerId, update);
+  });
+}
+
+var bakeProgress = new ui.ProgressBar();
+var bakeButton = new ui.Button("Bake tessellation");
+bakeButton.onClick = function () {
+  var name = patternName.getValue();
+  if (typeof name !== "string" || name.length < 1 || name.length > 80) {
+    tessStatus.setText("Pattern name must be 1-80 characters.");
+    return;
+  }
+  if (bindings.length < 1) {
+    tessStatus.setText("Add at least one bound parameter before baking.");
+    return;
+  }
+
+  var lattice = computeLattice();
+  var a = lattice.a;
+  var b = lattice.b;
+  if (!isFinite(a[0]) || !isFinite(a[1]) || !isFinite(b[0]) || !isFinite(b[1])) {
+    tessStatus.setText("Lattice vectors must be finite.");
+    return;
+  }
+  var determinant = a[0] * b[1] - a[1] * b[0];
+  if (determinant === 0) {
+    tessStatus.setText("Lattice vectors must not be collinear.");
+    return;
+  }
+
+  var resolution = api.get(api.getActiveComp(), "resolution");
+  var bounds = [0, 0, resolution[0], resolution[1]];
+  if (!bounds.every(isFinite)) {
+    tessStatus.setText("Composition bounds must be finite.");
+    return;
+  }
+
+  var boundBindings = bindings.map(function (binding) {
+    var light = binding.lightField.getValue();
+    var dark = binding.darkField.getValue();
+    return {
+      layerId: binding.layerId,
+      attrId: binding.attrId,
+      light: light,
+      dark: dark,
+    };
+  });
+  var boundaryOk = boundBindings.every(function (binding) {
+    return isFinite(binding.light) && isFinite(binding.dark);
+  });
+  if (!boundaryOk) {
+    tessStatus.setText("Light/Dark boundary values must be finite numbers.");
+    return;
+  }
+
+  var manifest = {
+    format_version: 1,
+    name: name,
+    lattice: { a: a, b: b },
+    bounds: bounds,
+    bindings: boundBindings.map(function (binding) {
+      return {
+        layer_id: binding.layerId,
+        attribute_id: binding.attrId,
+        light: binding.light,
+        dark: binding.dark,
+        curve: null,
+      };
+    }),
+  };
+
+  bakeButton.setEnabled(false);
+  bakeProgress.setValue(0);
+
+  client.post("/api/tessellations/sessions", JSON.stringify(manifest), "application/json");
+  if (client.status() !== 200) {
+    tessStatus.setText("Could not start bake: " + client.body());
+    bakeButton.setEnabled(true);
+    return;
+  }
+  var sessionId = JSON.parse(client.body()).session_id;
+
+  var originalValues = bindings.map(function (binding) {
+    return api.get(binding.layerId, binding.attrId);
+  });
+
+  try {
+    var allStatesUploaded = true;
+    for (var stateIndex = 0; stateIndex < 32; stateIndex++) {
+      var t = stateIndex / 31;
+      boundBindings.forEach(function (binding) {
+        var value = binding.light + t * (binding.dark - binding.light);
+        var update = {};
+        update[binding.attrId] = value;
+        api.set(binding.layerId, update);
+      });
+
+      var stateStem = api.getTempFolder() + "/plotter-tessellation-" + stateIndex;
+      api.renderSVGFrame(stateStem, 100, true);
+      var stateSvg = api.readFromFile(stateStem + '.svg');
+
+      client.post("/api/tessellations/sessions/" + sessionId + "/states/" + stateIndex,
+        stateSvg, "image/svg+xml");
+      if (client.status() !== 200) {
+        tessStatus.setText("Upload failed at state " + stateIndex + ": " + client.body());
+        allStatesUploaded = false;
+        break;
+      }
+      bakeProgress.setValue(Math.round(((stateIndex + 1) / STATE_COUNT) * 100));
+    }
+
+    if (allStatesUploaded) {
+      client.post("/api/tessellations/sessions/" + sessionId + "/finalize", "", "application/json");
+      if (client.status() === 200) {
+        tessStatus.setText("Installed " + name);
+      } else {
+        tessStatus.setText(client.body());
+      }
+    }
+  } catch (e) {
+    tessStatus.setText("Bake failed: " + e.message);
+    console.error(e);
+  } finally {
+    restoreBindings(originalValues);
+    bakeProgress.setValue(0);
+    bakeButton.setEnabled(true);
+  }
+};
+ui.add(bakeButton);
+ui.add(bakeProgress);
+
 ui.show();
 
 function push() {
