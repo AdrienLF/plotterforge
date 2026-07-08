@@ -1,4 +1,4 @@
-import os, json, threading, queue, time, tempfile, re, io, zipfile, math, base64, uuid, pickle, hashlib, logging
+import os, json, threading, queue, time, tempfile, re, io, zipfile, math, base64, uuid, pickle, hashlib, logging, shutil
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -16,6 +16,13 @@ from engine.canvas import DrawingArea, AREA_PRESETS
 from engine.pens import DrawingSet, PEN_LIBRARIES, library_pens
 from engine.params import schema_json, validate
 from engine.pfm import REGISTRY, get as get_pfm, list_pfms
+from engine.pfm.tessellation import replace_tessellation_pattern
+from engine.tessellation_library import (
+    MAX_SVG_BYTES,
+    MAX_TOTAL_BYTES,
+    PatternValidationError,
+    TessellationLibrary,
+)
 from engine.generate import GENERATORS, get_generator, list_generators
 from engine.genframe import apply_framework
 from engine.composition import (
@@ -148,6 +155,19 @@ _process_thread = None
 # Serializes worker validation/start with project transition check/mutation.
 _operation_lock = threading.Lock()
 _segmentation_adapter = None
+
+# Cavalry tessellation bakes are staged outside projects so a complete pattern
+# can be validated and installed atomically before it enters PFM discovery.
+_tessellation_library = TessellationLibrary(project_mod.WORKSPACE / 'tessellations')
+_tessellation_session_root = project_mod.WORKSPACE / 'tessellation-imports'
+_TESSELLATION_SESSION_TTL = 60 * 60
+
+for _custom_tessellation in _tessellation_library.load_all():
+    try:
+        replace_tessellation_pattern(_custom_tessellation)
+    except Exception:
+        LOG.exception('Could not register tessellation package %s',
+                      _custom_tessellation.id)
 
 def _project_public(p):
     has_image = bool(p.image_path and p.image_path.exists())
@@ -2941,6 +2961,94 @@ def api_layer_field_preview(layer_id):
         _field_preview_cache.clear()      # tiny cache: only the latest preview
         _field_preview_cache[key] = png
     return app.response_class(png, mimetype='image/png')
+
+
+def _tessellation_session_dir(session_id):
+    """Return a live import session directory, removing expired sessions."""
+    if not re.fullmatch(r'[0-9a-f]{32}', session_id or ''):
+        return None
+    path = _tessellation_session_root / session_id
+    if not path.is_dir():
+        return None
+    try:
+        created_at = float((path / 'created_at').read_text('utf-8'))
+    except (OSError, ValueError):
+        shutil.rmtree(path, ignore_errors=True)
+        return None
+    if time.time() - created_at > _TESSELLATION_SESSION_TTL:
+        shutil.rmtree(path, ignore_errors=True)
+        return None
+    return path
+
+
+@app.route('/api/tessellations/sessions', methods=['POST'])
+def api_tessellation_session_create():
+    manifest = request.get_json(silent=True)
+    if not isinstance(manifest, dict):
+        return jsonify(error='Manifest must be a JSON object'), 400
+    _tessellation_session_root.mkdir(parents=True, exist_ok=True)
+    session_id = uuid.uuid4().hex
+    session_dir = _tessellation_session_root / session_id
+    session_dir.mkdir()
+    (session_dir / 'manifest.json').write_text(
+        json.dumps(manifest, separators=(',', ':')), encoding='utf-8')
+    (session_dir / 'created_at').write_text(str(time.time()), encoding='utf-8')
+    return jsonify(session_id=session_id)
+
+
+@app.route('/api/tessellations/sessions/<session_id>/states/<int:index>',
+           methods=['POST'])
+def api_tessellation_session_state(session_id, index):
+    if index < 0 or index >= 32:
+        return jsonify(error='State index must be between 0 and 31'), 400
+    session_dir = _tessellation_session_dir(session_id)
+    if session_dir is None:
+        return jsonify(error='Unknown or expired tessellation session'), 404
+    payload = request.get_data(cache=False)
+    if len(payload) > MAX_SVG_BYTES:
+        return jsonify(error=f'State exceeds {MAX_SVG_BYTES} bytes'), 413
+    aggregate_size = sum(
+        path.stat().st_size for path in session_dir.glob('state-*.svg'))
+    if aggregate_size + len(payload) > MAX_TOTAL_BYTES:
+        return jsonify(error=f'Package exceeds {MAX_TOTAL_BYTES} total bytes'), 413
+    state_path = session_dir / f'state-{index:02d}.svg'
+    try:
+        with state_path.open('xb') as handle:
+            handle.write(payload)
+    except FileExistsError:
+        return jsonify(error=f'State {index} has already been uploaded'), 409
+    return jsonify(ok=True, index=index)
+
+
+@app.route('/api/tessellations/sessions/<session_id>/finalize', methods=['POST'])
+def api_tessellation_session_finalize(session_id):
+    session_dir = _tessellation_session_dir(session_id)
+    if session_dir is None:
+        return jsonify(error='Unknown or expired tessellation session'), 404
+    state_paths = [session_dir / f'state-{index:02d}.svg' for index in range(32)]
+    missing = [index for index, path in enumerate(state_paths) if not path.is_file()]
+    if missing:
+        shutil.rmtree(session_dir, ignore_errors=True)
+        return jsonify(error=f'Missing tessellation states: {missing}'), 400
+    try:
+        manifest = json.loads((session_dir / 'manifest.json').read_text('utf-8'))
+        states = [path.read_text('utf-8') for path in state_paths]
+        pattern = _tessellation_library.install(manifest, states)
+    except (PatternValidationError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
+        shutil.rmtree(session_dir, ignore_errors=True)
+        return jsonify(error=str(exc) or 'Invalid tessellation package'), 400
+    replace_tessellation_pattern(pattern)
+    shutil.rmtree(session_dir, ignore_errors=True)
+    return jsonify(
+        ok=True,
+        pattern={'id': pattern.id, 'name': pattern.name, 'source': pattern.source},
+        pfms=list_pfms(),
+    )
+
+
+@app.route('/api/tessellations')
+def api_tessellations_list():
+    return jsonify(patterns=_tessellation_library.list())
 
 @app.route('/api/pfm/list')
 def api_pfm_list():
