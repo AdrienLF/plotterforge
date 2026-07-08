@@ -34,5 +34,14 @@ def register_tessellation_pattern(pattern: TessellationPattern) -> PFM:
                         params=list(PARAMS), generate=generate))
 
 
+def replace_tessellation_pattern(pattern: TessellationPattern) -> PFM:
+    """Register or replace the PFM for a (re)installed custom pattern.
+
+    ``register()`` assigns ``REGISTRY[pfm.id]``, so re-registering the same
+    stable ID swaps the pattern in place without touching layers already
+    rendered from the previous version."""
+    return register_tessellation_pattern(pattern)
+
+
 for _pattern in BUILTIN_PATTERNS.values():
     register_tessellation_pattern(_pattern)

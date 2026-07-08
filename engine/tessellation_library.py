@@ -14,11 +14,11 @@ import io
 import json
 import logging
 import math
+import os
 import re
 import shutil
 import unicodedata
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -294,3 +294,190 @@ def validate_package(manifest: dict, states: list[str]) -> TessellationPattern:
         )
     except ValueError as exc:
         raise PatternValidationError(str(exc)) from exc
+
+
+# --------------------------------------------------------------------------
+# Persistence
+# --------------------------------------------------------------------------
+
+PREVIEW_VALUES = {
+    "columns": 10, "rotation": 0, "phase_x": 0, "phase_y": 0,
+    "tone_response": 1, "invert_tone": False, "remove_duplicates": True,
+}
+
+
+def _pattern_to_json(pattern: TessellationPattern, updated_at: str) -> dict:
+    return {
+        "id": pattern.id,
+        "name": pattern.name,
+        "source": pattern.source,
+        "a": list(pattern.a),
+        "b": list(pattern.b),
+        "bounds": list(pattern.bounds),
+        "states": [
+            {"paths": [{"points": [list(p) for p in path.points],
+                        "closed": path.closed}
+                       for path in state.paths]}
+            for state in pattern.states
+        ],
+        "bindings": [
+            {"layer_id": binding.layer_id,
+             "attribute_id": binding.attribute_id,
+             "light": binding.light,
+             "dark": binding.dark,
+             "curve": [list(pair) for pair in binding.curve]
+                      if binding.curve is not None else None}
+            for binding in pattern.bindings
+        ],
+        "updated_at": updated_at,
+    }
+
+
+def _pattern_from_json(data: dict) -> TessellationPattern:
+    states = tuple(
+        TileState(tuple(
+            TilePath(tuple((float(x), float(y)) for x, y in path["points"]),
+                     bool(path["closed"]))
+            for path in state["paths"]
+        ))
+        for state in data["states"]
+    )
+    bindings = tuple(
+        ParameterBinding(
+            layer_id=str(binding["layer_id"]),
+            attribute_id=str(binding["attribute_id"]),
+            light=float(binding["light"]),
+            dark=float(binding["dark"]),
+            curve=tuple((str(name), float(value)) for name, value in binding["curve"])
+                  if binding.get("curve") is not None else None,
+        )
+        for binding in data["bindings"]
+    )
+    return TessellationPattern(
+        id=str(data["id"]), name=str(data["name"]), source=str(data["source"]),
+        a=tuple(float(v) for v in data["a"]),
+        b=tuple(float(v) for v in data["b"]),
+        bounds=tuple(float(v) for v in data["bounds"]),
+        states=states, bindings=bindings,
+    )
+
+
+def _render_preview(pattern: TessellationPattern) -> Image.Image:
+    """105x148 preview: the pattern over a vertical light-to-dark gradient."""
+    width, height = PREVIEW_SIZE
+    gradient = Image.new("L", PREVIEW_SIZE)
+    for y in range(height):
+        gradient.paste(int(20 + 215 * y / (height - 1)), (0, y, width, y + 1))
+    items = render_tessellation(gradient, pattern, PREVIEW_VALUES)
+    canvas = Image.new("RGB", PREVIEW_SIZE, "white")
+    draw = ImageDraw.Draw(canvas)
+    for item in items:
+        if item.path is None:
+            continue
+        points = [(float(x), float(y)) for x, y in item.path.points]
+        if item.path.closed:
+            points.append(points[0])
+        if len(points) >= 2:
+            draw.line(points, fill="black", width=1)
+    return canvas
+
+
+def _write_flushed(path: Path, data: bytes) -> None:
+    with open(path, "wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+class TessellationLibrary:
+    """Filesystem-backed store of validated custom tessellation patterns.
+
+    Each entry lives in ``root/<pattern_id>/`` holding ``pattern.json`` (the
+    normalized dataclasses) and ``preview.png``. Installation stages the new
+    entry in a sibling directory and swaps it in atomically, so an existing
+    package is never left half-replaced.
+    """
+
+    def __init__(self, root: Path):
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def install(self, manifest: dict, states: list[str]) -> TessellationPattern:
+        pattern = validate_package(manifest, states)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        staging = self.root / f"{pattern.id}.staging"
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging.mkdir(parents=True)
+        try:
+            payload = json.dumps(_pattern_to_json(pattern, updated_at),
+                                 separators=(",", ":")).encode("utf-8")
+            _write_flushed(staging / "pattern.json", payload)
+            preview_buffer = io.BytesIO()
+            _render_preview(pattern).save(preview_buffer, format="PNG")
+            _write_flushed(staging / "preview.png", preview_buffer.getvalue())
+            self._atomic_replace(staging, self.root / pattern.id)
+        finally:
+            if staging.exists():
+                shutil.rmtree(staging, ignore_errors=True)
+        return pattern
+
+    def _atomic_replace(self, staging: Path, target: Path) -> None:
+        """Swap ``staging`` into ``target``, restoring the previous entry if
+        the final rename fails."""
+        backup = target.with_name(target.name + ".backup")
+        if backup.exists():
+            shutil.rmtree(backup)
+        had_previous = target.exists()
+        if had_previous:
+            target.rename(backup)
+        try:
+            staging.rename(target)
+        except BaseException:
+            if had_previous:
+                backup.rename(target)
+            raise
+        if had_previous:
+            shutil.rmtree(backup, ignore_errors=True)
+
+    def _entry_dirs(self) -> list[Path]:
+        return sorted(
+            entry for entry in self.root.iterdir()
+            if entry.is_dir() and (entry / "pattern.json").is_file()
+        )
+
+    def _load_entry(self, entry: Path) -> TessellationPattern:
+        data = json.loads((entry / "pattern.json").read_text("utf-8"))
+        if data.get("id") != entry.name:
+            raise PatternValidationError(
+                f"Entry {entry.name!r} declares mismatched id {data.get('id')!r}")
+        return _pattern_from_json(data)
+
+    def get(self, pattern_id: str) -> TessellationPattern:
+        entry = self.root / pattern_id
+        if not (entry / "pattern.json").is_file():
+            raise KeyError(f"Unknown tessellation pattern {pattern_id!r}")
+        return self._load_entry(entry)
+
+    def load_all(self) -> list[TessellationPattern]:
+        patterns = []
+        for entry in self._entry_dirs():
+            try:
+                patterns.append(self._load_entry(entry))
+            except Exception:
+                logger.exception("Skipping invalid tessellation package %s", entry)
+        return patterns
+
+    def list(self) -> list[dict]:
+        records = []
+        for entry in self._entry_dirs():
+            try:
+                data = json.loads((entry / "pattern.json").read_text("utf-8"))
+                if data.get("id") != entry.name:
+                    raise PatternValidationError("mismatched id")
+                records.append({"id": data["id"], "name": data["name"],
+                                "source": data["source"],
+                                "updated_at": data["updated_at"]})
+            except Exception:
+                logger.exception("Skipping invalid tessellation package %s", entry)
+        return sorted(records, key=lambda record: record["id"])

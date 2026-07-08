@@ -4,6 +4,7 @@ import pytest
 
 from engine.tessellation_library import (
     PatternValidationError,
+    TessellationLibrary,
     parse_state_svg,
     slugify_pattern_name,
     validate_package,
@@ -46,3 +47,33 @@ def test_validate_rejects_active_and_external_svg():
                  '<svg><image href="https://example.com/x.png"/></svg>'):
         with pytest.raises(PatternValidationError):
             validate_package(manifest(), [body] * 32)
+
+
+def test_install_persists_and_replaces_atomically(tmp_path):
+    library = TessellationLibrary(tmp_path)
+    first = library.install(manifest("Grid"), [SVG] * 32)
+    assert first.id == "tessellation_custom_grid"
+    assert (tmp_path / first.id / "pattern.json").is_file()
+    changed = manifest("Grid")
+    changed["bindings"][0]["dark"] = 180
+    second = library.install(changed, [SVG] * 32)
+    assert second.bindings[0].dark == 180
+    assert len(library.list()) == 1
+
+
+def test_failed_replace_preserves_previous_package(tmp_path, monkeypatch):
+    library = TessellationLibrary(tmp_path)
+    original = library.install(manifest("Grid"), [SVG] * 32)
+    before = (tmp_path / original.id / "pattern.json").read_bytes()
+    monkeypatch.setattr(library, "_atomic_replace", lambda *args: (_ for _ in ()).throw(OSError("disk")))
+    with pytest.raises(OSError, match="disk"):
+        library.install(manifest("Grid"), [SVG] * 32)
+    assert (tmp_path / original.id / "pattern.json").read_bytes() == before
+
+
+def test_load_all_isolates_corrupt_entries(tmp_path):
+    library = TessellationLibrary(tmp_path)
+    good = library.install(manifest("Good"), [SVG] * 32)
+    (tmp_path / "tessellation_custom_bad").mkdir()
+    (tmp_path / "tessellation_custom_bad" / "pattern.json").write_text("{")
+    assert [p.id for p in library.load_all()] == [good.id]
