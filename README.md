@@ -24,6 +24,19 @@ launchers are offline and just start the prepared server. See **Full setup** and
 For frontend development with hot-reload: `cd frontend && npm run dev` (proxies
 `/api` to the Flask server).
 
+## Cavalry tessellation authoring
+
+Cavalry can bake one repeat unit into a custom tone-responsive tessellation for
+Plotter Studio. The Plotter Bridge samples selected numeric Cavalry parameters
+between **Light** and **Dark** values, uploads 32 SVG states, and installs the
+result as a style in the **Tessellation** family.
+
+For the durable package/API reference, see the
+[Cavalry tessellation guide](docs/cavalry-tessellations.md). For the
+artist-focused workflow in the local manual, open the
+[artist manual](http://localhost:7438/static/docs/tessellations.html) while
+Studio is running.
+
 - **Path Finding Modules (42):** Voronoi / LBG / Adaptive / Poisson-disk samplers ×
   Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus Grid
   Halftone, Random Stipple, Spiral, Hatch, Sketch, Streamlines, Composite,

@@ -151,6 +151,22 @@ class FrontendContractsTest(unittest.TestCase):
         self.assertIn('tessellation: "Tessellation"', panel)
         self.assertIn('/static/pfm-previews/${item.id}.png', picker)
 
+    def test_cavalry_tessellation_guides_are_linked_and_complete(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        guide_path = ROOT / "docs/cavalry-tessellations.md"
+        self.assertIn("docs/cavalry-tessellations.md", readme)
+        self.assertIn("/static/docs/tessellations.html", readme)
+        self.assertTrue(guide_path.is_file())
+        guide = guide_path.read_text(encoding="utf-8")
+        for text in (
+            "## Artist workflow", "## Lattice presets",
+            "## Rebaking and recovery", "## Package format",
+            "## HTTP API", "## Limits",
+            "~/.plotter_studio/tessellations/",
+            "POST /api/tessellations/sessions", "GET /api/tessellations",
+        ):
+            self.assertIn(text, guide)
+
     def test_project_actions_invalidate_older_async_work_and_report_failures(self):
         api_ts = (ROOT / "frontend/src/lib/api.ts").read_text(encoding="utf-8")
 
