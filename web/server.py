@@ -734,9 +734,23 @@ def _rev(poly):
 
 
 def _circle_meta(element, se, px_to_mm):
-    """Return (cx, cy, r) in machine mm for a circular Circle/Ellipse, else None."""
+    """Return (cx, cy, r) in machine mm for a circular Circle/Ellipse, else None.
+
+    Fast path: svgelements already resolves transforms into the element's
+    cx/cy/rx/ry, so for a true circle we can skip the comparatively expensive
+    ``bbox()`` (which walks the flattened path). Anything non-circular,
+    degenerate, or non-finite falls back to the original bbox logic.
+    """
     if not isinstance(element, (se.Circle, se.Ellipse)):
         return None
+    try:
+        cx, cy = float(element.cx), float(element.cy)
+        rx, ry = float(element.rx), float(element.ry)
+        resolved = all(math.isfinite(v) for v in (cx, cy, rx, ry))
+    except (AttributeError, TypeError, ValueError):
+        resolved = False
+    if resolved and rx > 0 and ry > 0 and abs(rx - ry) <= 0.02 * max(rx, ry):
+        return cx * px_to_mm, -(cy * px_to_mm), ((rx + ry) / 2) * px_to_mm
     try:
         bb = element.bbox()
     except Exception:
