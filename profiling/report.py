@@ -140,6 +140,7 @@ def write_report(run: RunResult, output_dir: Path,
     _write_atomic(output_dir / "results.json", json.dumps(run.to_dict(), indent=2))
 
     aggregates = aggregate_samples(run.samples)
+    baseline_missing = baseline is not None and not Path(baseline).is_file()
     baselines = _load_baseline(baseline)
     floors = _warning_floors()
 
@@ -147,11 +148,13 @@ def write_report(run: RunResult, output_dir: Path,
     rows: list[str] = []
     for item in aggregates:
         prior = baselines.get((item.workload_id, item.segment_key))
-        if prior is None:
-            comparison = Comparison("new", None, None, "no baseline for this segment")
-        else:
+        if prior is not None:
             comparison = compare_aggregate(item, prior,
                                            floors.get(item.workload_id, 0.0))
+        elif baseline_missing:
+            comparison = Comparison("incomparable", None, None, "baseline file not found")
+        else:
+            comparison = Comparison("new", None, None, "no baseline for this segment")
         comparisons.append(comparison)
 
         delta = "—" if comparison.delta_ms is None else f"{comparison.delta_ms:+.1f} ms"

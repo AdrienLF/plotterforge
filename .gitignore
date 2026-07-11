@@ -12,5 +12,9 @@ wheels/
 # Local git worktrees
 .worktrees/
 
+# Profiling run artifacts (only named baselines under profiling/baselines/ are committed)
+artifacts/profiling/
+frontend/e2e/perf/results.jsonl
+
 # macOS
 .DS_Store

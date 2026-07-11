@@ -176,6 +176,8 @@ engine/        Plotter Studio engine: PFMs, samplers, styles, pens, drawing area
                version control, GPU/CPU backend, SVG output
 frontend/      Svelte 5 SPA (Photoshop-style UI); `npm run build` → web/static/app
 web/           Flask API + plotter driver (serves the SPA, runs the engine, plots)
+profiling/     Deterministic CPU/MPS/CUDA/browser profiling suite (see docs/profiling.md)
+tools/         Repo-local entry points (e.g. tools/profile_suite.py)
 main.py        Legacy GUI application (customtkinter)
 stipple.py     legacy grid_halftone()/random_stipple() — superseded by engine/pfm/grid.py
 svg_export.py  legacy export_svg() — superseded by engine/svg_io.py

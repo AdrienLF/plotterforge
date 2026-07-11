@@ -68,6 +68,9 @@ A running list of what this software does. One line each. Updated on every commi
 - **Manual jog** — Manual plotter movement commands (`/api/manual`).
 - **Wireless plotting** — Drive the iDraw from Mac Inkscape over a Tailscale `socat` serial bridge (see `bridge/`).
 
+## Engineering
+- **Performance profiling suite** — Deterministic CPU/MPS/CUDA/browser profiling with per-environment segmentation, named baselines, and warning-only trend reports that never fail CI (`tools/profile_suite.py`, see `docs/profiling.md`).
+
 ## Projects
 - **Project management** — Create, open, rename, delete projects; stored under `~/.plotter_studio/`.
 - **Settings** — Persisted app settings (`/api/settings`).
