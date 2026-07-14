@@ -2838,6 +2838,33 @@ def _drawing_set_from(data):
         _project.drawing_set = DrawingSet.from_dict(data)
     return _project.drawing_set
 
+def _normalize_image_orientation(data: bytes):
+    """Bake a photo's EXIF orientation into the pixels.
+
+    PIL reports the sensor's raw dimensions while browsers auto-rotate per the
+    EXIF tag, so an untransposed portrait phone photo would get a landscape
+    layer box and render squeezed. Returns (bytes, width, height) with the
+    orientation applied and the tag gone, so every consumer (layer box, PFM,
+    browser) sees identical pixels and aspect."""
+    from PIL import Image, ImageOps
+    im = Image.open(io.BytesIO(data))
+    orientation = 1
+    try:
+        orientation = int(im.getexif().get(0x0112, 1) or 1)
+    except Exception:
+        pass
+    if orientation == 1:
+        return data, im.size[0], im.size[1]
+    fmt = im.format or 'PNG'
+    im = ImageOps.exif_transpose(im)
+    buf = io.BytesIO()
+    if fmt.upper() == 'JPEG':
+        im.save(buf, 'JPEG', quality=95, exif=im.getexif())
+    else:
+        im.save(buf, fmt)
+    return buf.getvalue(), im.size[0], im.size[1]
+
+
 @app.route('/api/image', methods=['POST'])
 def api_image():
     f = request.files.get('file')
@@ -2845,9 +2872,7 @@ def api_image():
         return jsonify(error='No file'), 400
     data = f.read()
     try:
-        from PIL import Image
-        im = Image.open(io.BytesIO(data))
-        w, h = im.size
+        data, w, h = _normalize_image_orientation(data)
     except Exception as exc:
         return jsonify(error=f'Not a readable image: {exc}'), 400
     # The source image still backs regions (SAM), field masks and the legacy

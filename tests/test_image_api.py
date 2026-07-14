@@ -73,6 +73,31 @@ class ImageApiTest(unittest.TestCase):
             self.assertEqual(served.size, (3, 2))
         raster.close()
 
+    def test_exif_orientation_is_baked_in_so_aspect_is_correct(self):
+        # A 600x200 JPEG tagged orientation 6 renders as 200x600 in browsers;
+        # the layer box and stored pixels must agree with that.
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        buf = io.BytesIO()
+        Image.new("RGB", (600, 200), "#888").save(buf, "JPEG", exif=exif)
+        buf.seek(0)
+        payload = self.client.post(
+            "/api/image",
+            data={"file": (buf, "phone photo.jpg")},
+            content_type="multipart/form-data",
+        ).get_json()
+
+        self.assertEqual((payload["width"], payload["height"]), (200, 600))
+        layer = next(l for l in payload["composition"]["layers"]
+                     if l["id"] == payload["layer_id"])
+        self.assertAlmostEqual(layer["width"] / layer["height"], 200 / 600, places=4)
+
+        raster = self.client.get(f"/api/composition/layers/{layer['id']}/raster")
+        with Image.open(io.BytesIO(raster.data)) as served:
+            self.assertEqual(served.size, (200, 600))
+            self.assertEqual(int(served.getexif().get(0x0112, 1) or 1), 1)
+        raster.close()
+
     def test_raster_layer_accepts_rotation_patch(self):
         payload = self._upload().get_json()
         layer_id = payload["layer_id"]
