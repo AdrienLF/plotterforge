@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Choose a Plotter Studio path-finding style by subject, pen width, desired continuity, visual language, and plotting cost.">
+<title>Choose a style · Plotter Studio Manual</title>
+<link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
+</head>
+<body>
+<main class="wrap">
+
+<nav class="crumbs"><a href="index.html">Manual</a> › Choose a style</nav>
+
+<header class="hero">
+  <div class="kicker">Plotter Studio · Decision guide</div>
+  <h1>Choose by intention, not by name</h1>
+  <p class="lede">The right module is a bargain between the image, the physical pen, and the time you are willing to plot. Start with the mark you want, then tune density to what the pen can resolve.</p>
+</header>
+
+<h2>The short answer</h2>
+<table>
+  <tr><th>Goal</th><th>Start with</th><th>Why</th><th>Cost</th></tr>
+  <tr><td>Portraits</td><td>Voronoi Stippling</td><td>Soft tonal modelling; dots remain independent and forgiving.</td><td>Medium</td></tr>
+  <tr><td>Portraits with visible flow</td><td>Engraving</td><td>Density carries tone while direction describes form.</td><td>Medium–Slow</td></tr>
+  <tr><td>Bold markers</td><td>Hatch or Shape Dither</td><td>Large repeated marks survive thick nibs and distant viewing.</td><td>Fast–Medium</td></tr>
+  <tr><td>Single continuous line</td><td>TSP</td><td>One tour visits the sampled points with very few pen lifts.</td><td>Slow generation, efficient plot</td></tr>
+  <tr><td>Geometric posters</td><td>Tessellation or Shape Dither</td><td>A repeated visual grammar responds to image tone.</td><td>Fast–Medium</td></tr>
+  <tr><td>Organic line work</td><td>Streamlines Edge Field</td><td>Curves follow image structure instead of a fixed direction.</td><td>Medium</td></tr>
+  <tr><td>Multiple pens</td><td>Shape Dither, Mosaic or a generator</td><td>Discrete elements distribute cleanly and visibly across pens.</td><td>Medium</td></tr>
+  <tr><td>Reduce plotting time</td><td>Hatch, Spiral or low-column Shape Dither</td><td>Fewer, longer paths mean fewer lifts and less travel.</td><td>Fast</td></tr>
+</table>
+
+<h2>Choose the vocabulary</h2>
+<div class="cards">
+  <div class="card"><strong>Dots</strong><p>Stippling and Random Stipple are neutral, tonal and forgiving. Ideal when the image should dominate the style.</p></div>
+  <div class="card"><strong>Short marks</strong><p>Dashes and Shapes reveal the sampling rhythm. Rotation fields can make the marks describe form.</p></div>
+  <div class="card"><strong>Networks</strong><p>Triangulation, Tree and Diagram turn sites into crystalline, branching or cracked structures.</p></div>
+  <div class="card"><strong>Continuous paths</strong><p>TSP, Spiral, Hatch and Streamlines reduce pen lifts and make the drawing process part of the image.</p></div>
+  <div class="card"><strong>Tiles</strong><p>Mosaic, Tessellations and Shape Dither trade photographic smoothness for a deliberate graphic system.</p></div>
+  <div class="card"><strong>Growth</strong><p>Differential Growth and Circle Packing create organisms rather than screens; allow more iteration time.</p></div>
+</div>
+
+<h2>Choose the sampler rhythm</h2>
+<table>
+  <tr><th>Sampler</th><th>Character</th><th>Use it when</th></tr>
+  <tr><td>Voronoi</td><td>Relaxed and even</td><td>You want a polished default and can afford iterative settling.</td></tr>
+  <tr><td>Adaptive</td><td>Direct tone-to-spacing</td><td>You want a Fast draft or a more visibly varied rhythm.</td></tr>
+  <tr><td>LBG</td><td>Disciplined dot sizes</td><td>The halftone structure itself should feel engineered.</td></tr>
+  <tr><td>Poisson</td><td>Organic blue noise</td><td>You want a hard minimum distance without a relaxed lattice.</td></tr>
+</table>
+
+<h2>Pen width sets the real resolution</h2>
+<p><strong>Pen width</strong> is not cosmetic. It tells Plotter Studio how much detail the physical tool can resolve. Set the measured width first, then judge density at Fit Page zoom.</p>
+<ul>
+  <li><strong>0.1–0.3 mm fineliner:</strong> detailed stippling, engraving, diagrams and fine tessellations are realistic.</li>
+  <li><strong>0.4–0.8 mm technical pen:</strong> reduce point counts; prefer hatch, dashes, larger shapes and open streamlines.</li>
+  <li><strong>1 mm and above:</strong> treat the mark as a graphic unit. Shape Dither, broad hatch, generators and sparse packing remain legible.</li>
+  <li><strong>Flat nib:</strong> preview the nib angle, but remember the SVG remains a centreline—the physical nib makes the width.</li>
+</ul>
+
+<h2>Plotting-cost ladder</h2>
+<table>
+  <tr><th>Cost</th><th>Typical modules</th><th>Control the cost</th></tr>
+  <tr><td>Fast</td><td>Hatch, Spiral, coarse Shape Dither</td><td>Increase spacing or reduce columns.</td></tr>
+  <tr><td>Medium</td><td>Stippling, Dashes, Shapes, Tessellations, Streamlines</td><td>Lower point density; use Ignore White; estimate travel.</td></tr>
+  <tr><td>Slow</td><td>TSP, dense Diagram/Triangulation, Differential Growth, complex composites</td><td>Draft first, cap points, save a Version before the final run.</td></tr>
+</table>
+<p>Generation cost and plotting cost are different. TSP can be expensive to compute but economical to plot; thousands of independent dots compute quickly yet spend real time on pen lifts.</p>
+
+<h2>Starting recipes</h2>
+<h3>Soft portrait, 0.3 mm black pen</h3>
+<p>Voronoi Stippling, Point Density 700, Ignore White on, Stipple Size 0.75. Raise Contrast only after the face reads at Fit Page zoom.</p>
+
+<h3>Graphic portrait, three pens</h3>
+<p>Shape Dither with 32–45 columns, 4–6 tone levels, error diffusion on, and a simple uploaded symbol. Use Luminance distribution for a tonal pen set.</p>
+
+<h3>One-line landscape</h3>
+<p>Adaptive TSP for the first draft, then Voronoi TSP for a more settled final route. Cap points before increasing quality.</p>
+
+<h3>Fabric, fur or wind</h3>
+<p>Engraving or Streamlines Edge Field. Bind direction to a mix of edge strength and a painted field; keep density tied to image tone.</p>
+
+<div class="note"><strong>Still undecided?</strong> Generate the same crop with three candidates, save each as a Version, and compare thumbnails tomorrow. A seed makes the comparison repeatable; memory does not.</div>
+
+<footer>Try the settings in the <a href="tutorials.html">flagship tutorials</a>, then use the <a href="reference.html">PFM reference</a> for every control.</footer>
+
+</main>
+</body>
+</html>

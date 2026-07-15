@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Compare Plotter Studio path-finding styles, create AI regions, use Shape Dither, and generate procedural drawings.">
 <title>Creating strokes · Plotter Studio Manual</title>
 <link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
 <nav class="crumbs"><a href="index.html">Manual</a> › Creating strokes</nav>
 
@@ -52,7 +54,9 @@
   Every module has a <strong>Seed</strong>: the same seed reproduces the same
   drawing exactly, a different seed re-rolls the randomness. Parameters marked
   with <strong>◉</strong> can be driven spatially — see
-  <a href="fields.html">Painting with Fields</a>.
+  <a href="fields.html">Painting with Fields</a>. For every default, range,
+  choice and help description, use the generated
+  <a href="reference.html">PFM reference</a>.
 </p>
 
 <h3>Point modules: sampler × style</h3>
@@ -72,7 +76,6 @@
   <figure><img src="../pfm-previews/voronoi_diagram.png" alt="Diagram"><figcaption>Diagram — Voronoi cell walls; cracked-earth look</figcaption></figure>
   <figure><img src="../pfm-previews/voronoi_tsp.png" alt="TSP"><figcaption>TSP — one continuous line through every point</figcaption></figure>
 </div>
-
 <p>
   Then the four <strong>samplers</strong> — where the points go. Same style
   (stippling), four different point engines:
@@ -106,11 +109,34 @@
   <figure><img src="../pfm-previews/engraving.png" alt="Engraving"><figcaption>Engraving — copperplate shading; density from tone, direction from a mixable field. <a href="fields.html">Steer it by hand</a></figcaption></figure>
   <figure><img src="../pfm-previews/grid_halftone.png" alt="Grid Halftone"><figcaption>Grid Halftone — screen-like dot grid</figcaption></figure>
   <figure><img src="../pfm-previews/dither_halftone.png" alt="Dither Halftone"><figcaption>Dither Halftone — Floyd–Steinberg texture</figcaption></figure>
+  <figure><img src="../pfm-previews/shape_dither.png" alt="Shape Dither"><figcaption>Shape Dither — a tone-quantized grid of scalable, rotatable shapes</figcaption></figure>
   <figure><img src="../pfm-previews/random_stipple.png" alt="Random Stipple"><figcaption>Random Stipple — pure random dots, tone-weighted</figcaption></figure>
   <figure><img src="../pfm-previews/circle_packing.png" alt="Circle Packing"><figcaption>Circle Packing — circles packed tight, sized by tone</figcaption></figure>
   <figure><img src="../pfm-previews/layers.png" alt="Layers composite"><figcaption>Layers — several modules stacked in one pass</figcaption></figure>
   <figure><img src="../pfm-previews/mosaic_rectangles.png" alt="Mosaic Rectangles"><figcaption>Mosaic Rectangles — tiles, each drawn by a random module</figcaption></figure>
 </div>
+
+<h3>Shape Dither — build tone from symbols</h3>
+<p>
+  <strong>Shape Dither</strong> samples the image into a grid and stamps one
+  symbol per cell. Pick a built-in circle, square, star, triangle, cross or
+  rounded-square shape; set the number of columns and tone levels; then map light
+  and dark cells to minimum and maximum scale. Optional Floyd–Steinberg error
+  diffusion breaks up tone bands, while <em>Rotate with image</em> follows the
+  local image gradient in clean 90° steps.
+</p>
+<figure>
+  <img src="img/shape-dither.png" alt="The Shape Dither result and its Grid, Tone and Shape controls, showing blue stars, five tone levels, error diffusion and image-following rotation.">
+  <figcaption>Shape Dither with five tone states and error diffusion. The grid remains editable, and the stamped artwork is ordinary plottable vector geometry.</figcaption>
+</figure>
+<p>
+  Shape and background colours are independent. The optional background is
+  included in SVG export but marked never to plot. For your own symbol, choose
+  Shape Dither and click <strong>Upload shape SVG…</strong>: a single SVG uses
+  scale to carry tone. The Cavalry Plotter Bridge can instead bake up to 32
+  light-to-dark states, which appear as a reusable custom Shape Dither style
+  and can keep their source colours.
+</p>
 
 <div class="note">
   <strong>Which one first?</strong> Voronoi Stippling for portraits,
@@ -171,6 +197,6 @@
   Next: <a href="compose.html">Composing the page →</a>
 </footer>
 
-</div>
+</main>
 </body>
 </html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Follow three reproducible Plotter Studio projects from bundled source image to checked SVG or plotter pre-flight.">
+<title>Flagship tutorials · Plotter Studio Manual</title>
+<link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
+</head>
+<body>
+<main class="wrap">
+
+<nav class="crumbs"><a href="index.html">Manual</a> › Flagship tutorials</nav>
+
+<header class="hero">
+  <div class="kicker">Plotter Studio · Learn by making</div>
+  <h1>Three drawings, start to finish</h1>
+  <p class="lede">These are controlled experiments, not tours. Start with the supplied source, enter the listed values, and stop at each checkpoint. Once your result matches, replace one choice at a time with your own.</p>
+</header>
+
+<div class="note">
+  <strong>Download the tutorial source:</strong>
+  <a href="img/tutorial-source.png" download>tutorial-source.png</a> is a small radial tone study used by the automated tests. Its simple light-to-dark structure makes parameter changes easy to see and keeps every result reproducible.
+</div>
+
+<h2>Photo → Voronoi Stippling → SVG</h2>
+<p><strong>Outcome:</strong> one clean black stipple layer on A3, ready for SVG export. Allow about five minutes for the first run; the exact generation time depends on the active CPU/GPU backend.</p>
+
+<ol class="steps">
+  <li><strong>Create a clean project.</strong> Choose <em>Project → New project…</em> and name it <em>Tutorial · Stipple</em>. A separate project makes every checkpoint reversible and keeps your own work untouched.</li>
+  <li><strong>Import the source.</strong> Use <em>File → Import image…</em> and choose <code>tutorial-source.png</code>. The image becomes a selected raster layer, centred and fitted without cropping.</li>
+  <li><strong>Open Path Finding.</strong> Click the layer’s <strong>⚙</strong>, choose <em>Voronoi Stippling</em>, leave Region on <em>Whole image</em>, and choose <em>Paths</em> for Display.</li>
+</ol>
+
+<h3>Exact settings</h3>
+<table>
+  <tr><th>Group</th><th>Setting</th><th>Value</th></tr>
+  <tr><td>General</td><td>Seed</td><td><code>0</code></td></tr>
+  <tr><td>Voronoi Sampling</td><td>Point Density / Point Limit</td><td><code>500</code> / <code>0</code></td></tr>
+  <tr><td>Voronoi Sampling</td><td>Luminance Power / Density Power</td><td><code>5</code> / <code>5</code></td></tr>
+  <tr><td>Voronoi Sampling</td><td>Iterations / Accuracy / Ignore White</td><td><code>8</code> / <code>80</code> / on</td></tr>
+  <tr><td>Stippling</td><td>Stipple Size</td><td><code>0.9</code></td></tr>
+  <tr><td>Image</td><td>Brightness / Contrast</td><td><code>1</code> / <code>1</code></td></tr>
+</table>
+
+<ol class="steps" start="4">
+  <li><strong>Render the final geometry.</strong> Click <em>Apply / Regenerate</em>. Wait until the layer badge says <em>clean</em> and the status bar returns to Ready.</li>
+  <li><strong>Check the page.</strong> Close Path Finding. In Layers choose <em>Area → Fit</em>, set Rotate to <code>0°</code>, and confirm the selected bounds stay inside the paper.</li>
+  <li><strong>Set the physical pen.</strong> In Pens, keep one enabled black round pen at <code>0.5 mm</code>. The preview should remain legible at Fit Page zoom.</li>
+  <li><strong>Export SVG.</strong> Choose <em>File → Export SVG</em>. Open the result in a vector viewer and confirm its dimensions match the Drawing Area in millimetres.</li>
+</ol>
+
+<h3>Checkpoint</h3>
+<p>The selected layer reports <em>Voronoi Stippling · clean</em>; the centre contains the densest dots, the white corners are nearly empty, and the status bar shows a non-zero shape count and path length.</p>
+
+<figure>
+  <img src="img/voronoi-tutorial.png" alt="A reproducible Voronoi stippling result made from the bundled radial tone study in the current Plotter Studio Compose view.">
+  <figcaption>Expected result: density follows tone without turning the white corners into a visible grid.</figcaption>
+</figure>
+
+<div class="note"><strong>If your result differs:</strong> confirm the source is the supplied PNG, Region is Whole image, Ignore White is on, Seed is 0, and you clicked <em>Apply / Regenerate</em> rather than judging the low-resolution live draft.</div>
+
+<h2>Generator → multi-pen poster</h2>
+<p><strong>Outcome:</strong> an A3 Spokes &amp; Circles composition distributed across three physical pens. This route needs no image.</p>
+
+<ol class="steps">
+  <li>Create <em>Tutorial · Generator</em>, click <strong>＋ Generator</strong>, and select <em>Spokes &amp; Circles</em>.</li>
+  <li>In Drawing Area choose A3 portrait. In Pens add three enabled pens named <em>Dark</em>, <em>Mid</em>, and <em>Accent</em>, all at their real measured widths.</li>
+  <li>Enter the values below, then click <strong>✦ Generate</strong>. Generator switching is deliberate: changing the generator itself never redraws until you press Generate.</li>
+</ol>
+
+<h3>Exact settings</h3>
+<table>
+  <tr><th>Group</th><th>Setting</th><th>Value</th></tr>
+  <tr><td>Spokes &amp; Circles</td><td>Spokes / Length / Rotation</td><td><code>8</code> / <code>6 cm</code> / <code>0°</code></td></tr>
+  <tr><td>Spokes &amp; Circles</td><td>Circles / Segments / Outer radius</td><td><code>20</code> / <code>90</code> / <code>3.6 cm</code></td></tr>
+  <tr><td>Spokes &amp; Circles</td><td>Crop radius / Rays</td><td><code>3.8 cm</code> / <code>128</code></td></tr>
+  <tr><td>Pens</td><td>Pen Cycle / Spokes / Circles</td><td>on / on / <code>per_cluster</code></td></tr>
+  <tr><td>Pens</td><td>Circle stagger / Order / Offset</td><td><code>1</code> / forward / <code>0</code></td></tr>
+  <tr><td>Output</td><td>Final Scale / Squarify</td><td><code>1</code> / off</td></tr>
+</table>
+
+<h3>Checkpoint</h3>
+<p>The page contains eight radial clusters and background rays; the Pens panel shows non-zero usage for all three enabled pens. Save a Version named <em>Baseline · 3 pens</em> before experimenting with rotation or distortion.</p>
+
+<figure>
+  <img src="img/composition.png" alt="Spokes and circles generator output combined with another layer in Plotter Studio.">
+  <figcaption>Expected structure: repeated circle clusters, clean central crop-outs, and rays that remain outside those crops.</figcaption>
+</figure>
+
+<div class="note"><strong>If your result differs:</strong> regenerate after editing the enabled pen list. Pen cycling follows the current Drawing Set; a disabled pen cannot receive geometry.</div>
+
+<h2>Image → Shape Dither</h2>
+<p><strong>Outcome:</strong> a blue star grid with five quantized tone states, Floyd–Steinberg texture, and quarter-turn rotations following the image gradient.</p>
+
+<ol class="steps">
+  <li>Create <em>Tutorial · Shape Dither</em>, import <code>tutorial-source.png</code>, open the raster layer’s <strong>⚙</strong>, and choose <em>Shape Dither</em>.</li>
+  <li>Set Display to <em>Paths</em>. Use the values below and click <em>Apply / Regenerate</em>.</li>
+</ol>
+
+<h3>Exact settings</h3>
+<table>
+  <tr><th>Group</th><th>Setting</th><th>Value</th></tr>
+  <tr><td>Grid</td><td>Aspect / Columns</td><td>original / <code>28</code></td></tr>
+  <tr><td>Tone</td><td>Levels / Tone Response</td><td><code>5</code> / <code>1</code></td></tr>
+  <tr><td>Tone</td><td>Invert / Dither Error</td><td>off / on</td></tr>
+  <tr><td>Shape</td><td>Min Scale / Max Scale</td><td><code>0.08</code> / <code>0.95</code></td></tr>
+  <tr><td>Shape</td><td>Rotate With Image / Shape Type</td><td>on / star</td></tr>
+  <tr><td>Colour</td><td>Shape Color / Background</td><td><code>#2563eb</code> / disabled</td></tr>
+</table>
+
+<h3>Expected result</h3>
+<figure>
+  <img src="img/shape-dither.png" alt="Blue Shape Dither stars with editable grid, tone, error diffusion and rotation controls.">
+  <figcaption>Small stars carry the highlights; large stars build the dark centre. Error diffusion softens the boundaries between the five states.</figcaption>
+</figure>
+
+<p>For a custom symbol, click <strong>Upload shape SVG…</strong>. Start with one closed, centred shape and no background rectangle. Re-run the same settings before adding multiple Cavalry-baked states.</p>
+
+<h2>Estimate and Pre-flight</h2>
+<ol class="steps">
+  <li>Open <strong>3 Plot</strong> and inspect <strong>Estimate</strong>. A shape count, drawn distance, travel distance and duration must all be present.</li>
+  <li>If travel dwarfs drawing distance, try <em>Nearest + reverse paths</em>. Re-estimate before choosing 2-opt on dense work.</li>
+  <li>Confirm paper size and orientation, then Home, jog to the intended origin, and test Pen up/down over scrap.</li>
+  <li>Use <strong>▶ Preview</strong> to watch pen order and travel moves. Only then load the final paper and press Start.</li>
+</ol>
+
+<footer>Continue with <a href="choose-a-style.html">Choose a style</a> or inspect every control in the <a href="reference.html">PFM reference</a>.</footer>
+
+</main>
+</body>
+</html>

@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Configure pens and paper, estimate a job, calibrate a Grbl plotter, and run safe resumable multi-pen plots.">
 <title>Pens, paper &amp; plotting · Plotter Studio Manual</title>
 <link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
 <nav class="crumbs"><a href="index.html">Manual</a> › Pens, paper &amp; plotting</nav>
 
@@ -117,6 +119,19 @@
   resumed plot lands in exactly the same spot.
 </p>
 
+<h2>First-plot calibration</h2>
+<p>Calibrate with <strong>scrap paper</strong> and a washable or inexpensive pen. The purpose is to establish safe motion and reliable Pen up / Pen down values before valuable paper enters the machine.</p>
+<ol class="steps">
+  <li><strong>Clear the machine.</strong> Remove obstructions, secure scrap paper, install the pen loosely enough that the lift mechanism—not the clamp—sets its height.</li>
+  <li><strong>Home.</strong> In Manual press <strong>Home</strong> and watch the entire movement. Stop immediately if an axis moves away from its limit or meets resistance.</li>
+  <li><strong>Calibrate Pen up.</strong> Raise the pen, jog 20–30 mm, and confirm the tip never touches the paper. Increase the up height in small steps if it drags.</li>
+  <li><strong>Calibrate Pen down.</strong> Lower the pen over scrap. Use the lightest height that makes a continuous mark; excess pressure creates blobs and damages soft nibs.</li>
+  <li><strong>Cycle and jog.</strong> Repeat up/down ten times, then draw short manual moves near each paper edge to confirm the usable area and orientation.</li>
+  <li><strong>Run a dry run.</strong> Preview the real path order, then plot a tiny low-speed test before loading the final sheet.</li>
+</ol>
+
+<div class="note"><strong>Pre-flight:</strong> correct port → paper secured → Home → origin checked → Pen up/down cycle → Estimate → path Preview → tiny dry run → final paper → Start.</div>
+
 <h2>Multi-pen plots &amp; resume</h2>
 <ul>
   <li><strong>Pen changes</strong> — with several enabled pens, the job pauses between pens, shows which pen to load (name + colour) and waits for your confirmation. Copies on fresh sheets prompt the same way.</li>
@@ -129,12 +144,12 @@
   drawing (raise reordering if it is) → jog to origin → pen up/down test on
   scrap → Start. Cheap insurance for expensive paper.
 </div>
+<p>If any step behaves differently from the description, stop and use <a href="troubleshooting.html">Troubleshooting</a>. Do not compensate for a machine-coordinate problem by shifting the artwork.</p>
 
 <footer>
   Back to the <a href="index.html">manual</a> · or the deep magic:
   <a href="fields.html">Painting with Fields</a>
 </footer>
-
-</div>
+</main>
 </body>
 </html>

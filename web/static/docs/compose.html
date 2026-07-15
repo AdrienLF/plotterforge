@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Arrange raster and vector layers with precise transforms, crops, masks, occlusion, Fit, Fill, and pen previews.">
 <title>Composing the page · Plotter Studio Manual</title>
 <link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
 <nav class="crumbs"><a href="index.html">Manual</a> › Composing the page</nav>
 
@@ -15,20 +17,20 @@
   <div class="kicker">Plotter Studio · Manual</div>
   <h1>Composing the page</h1>
   <p class="lede">
-    Layers are the whole game: every path-finding result, generator drawing
-    and imported SVG is a layer on the page. The Composition step is where
-    they become one picture.
+    Layers are the whole game: every imported image, path-finding result,
+    generator drawing and SVG is a layer on the page. The Composition step is
+    where they become one picture.
   </p>
 </header>
 
 <figure>
-  <img src="img/composition.png" alt="The Compose step: two stacked layers in the Layers panel and their combined drawing in the viewport.">
-  <figcaption>The Layers panel drives everything: visibility, order, rename, duplicate, per-layer path-finding settings (⚙), and occlusion.</figcaption>
+  <img src="img/composition.png" alt="The current Compose step with a Spokes and Circles poster selected above a source-image layer, plus placement, rotation, Fit, Fill, crop and mask controls.">
+  <figcaption>The Layers panel drives everything: visibility, order, rename, duplicate, per-layer path-finding settings (⚙), occlusion, and exact placement.</figcaption>
 </figure>
 
 <h2>The Layers panel</h2>
 <ul>
-  <li><strong>＋ Path finding / ＋ Generator / ＋ Cavalry</strong> — three layer sources: image-driven strokes, procedural drawings, or a live bridge (below).</li>
+  <li><strong>Import / ＋ Path finding / ＋ Generator / ＋ Cavalry</strong> — raster images, image-driven strokes, procedural drawings, or a live bridge (below).</li>
   <li><strong>Checkbox</strong> — visibility. Hidden layers are excluded from export and plot.</li>
   <li><strong>⚙</strong> — reopens the layer's Path Finding settings; every layer remembers its module + parameters and can regenerate any time.</li>
   <li><strong>↑ ↓</strong> — stacking order. Later/upper layers draw on top and can occlude below.</li>
@@ -42,8 +44,31 @@
   page and to other layers' edges and centers (guide lines flash as you hit
   them). The toolbar's six <strong>align</strong> buttons align the selected
   layer to the page: left / center / right, top / middle / bottom. Grab a
-  corner handle to <strong>scale</strong>; pen widths stay true — only the
-  geometry scales.
+  corner handle to <strong>scale</strong>, or enter an exact X, Y, width,
+  height, scale, or <strong>rotation</strong> in the panel. <strong>Area →
+  Fit</strong> keeps the whole layer inside the padded drawing area;
+  <strong>Fill</strong> covers it. Pen widths stay true — only the geometry
+  scales.
+</p>
+
+<h2>Importing raster images</h2>
+<p>
+  <em>File → Import image…</em> (or the 🖼 rail button) creates a new raster
+  layer instead of replacing or cropping the page. PNG, JPEG, BMP, TIFF and
+  WebP imports preserve transparency and camera/phone EXIF orientation. The
+  complete image is fitted and centred initially, but it remains independent:
+  move, scale, rotate, duplicate and stack it like any other layer.
+</p>
+<figure>
+  <img src="img/raster-layer.png" alt="A selected raster layer rotated on the Compose page, with X, Y, width, height, scale, rotation, Fit and Fill controls visible in the Layers panel.">
+  <figcaption>An imported image is a real layer. Rotate it freely, use Fit to keep the whole image visible, or Fill to cover the drawing area.</figcaption>
+</figure>
+<p>
+  Click the layer's <strong>⚙</strong> to run path finding on its own full,
+  uncropped pixels. Choose <em>Raster</em>, <em>Paths</em>, or <em>Both</em>
+  while composing; image and strokes share the same transform. A layer may
+  overflow the page in the preview so placement stays easy, while SVG export
+  and plotting clip that overflow cleanly to the paper.
 </p>
 
 <h2>Crop &amp; masks</h2>
@@ -97,6 +122,6 @@
   Next: <a href="plot.html">Pens, paper and plotting →</a>
 </footer>
 
-</div>
+</main>
 </body>
 </html>

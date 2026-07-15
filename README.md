@@ -1,8 +1,35 @@
 # raster-to-plotter-svg
 
-Converts a raster image into a plotter-ready SVG of filled circles. Transparency is respected — clear areas produce no dots. A live GUI lets you tune every parameter before exporting.
+Plotter Studio turns raster images and procedural drawings into layered,
+plotter-ready SVG. Import images as freely transformable layers, apply one of
+50 built-in path-finding styles, combine the results on a physical page, and
+preview or drive a multi-pen plotter from the same app.
 
-![screenshot placeholder](docs/screenshot.png)
+![Plotter Studio Compose workspace](web/static/docs/img/overview.png)
+
+Start with the in-app [artist manual](http://localhost:7438/static/docs/index.html),
+the [three reproducible tutorials](http://localhost:7438/static/docs/tutorials.html),
+or the [style decision guide](http://localhost:7438/static/docs/choose-a-style.html)
+while Studio is running.
+
+### For artists
+
+Follow the [flagship tutorials](http://localhost:7438/static/docs/tutorials.html),
+then use [Choose a style](http://localhost:7438/static/docs/choose-a-style.html)
+and the generated [PFM reference](http://localhost:7438/static/docs/reference.html).
+
+### For plotter operators
+
+Read [Pens, paper & plotting](http://localhost:7438/static/docs/plot.html) and
+[Troubleshooting](http://localhost:7438/static/docs/troubleshooting.html), including
+the first-plot calibration and safe Stop/Resume procedure.
+
+### For developers
+
+Use the setup and project-layout sections below, the
+[profiling guide](docs/profiling.md), and the repository’s typed engine schemas.
+The artist reference is regenerated with
+`.venv/bin/python tools/build_docs_reference.py`.
 
 ## Plotter Studio (web app)
 
@@ -37,11 +64,16 @@ artist-focused workflow in the local manual, open the
 [artist manual](http://localhost:7438/static/docs/tessellations.html) while
 Studio is running.
 
-- **Path Finding Modules (42):** Voronoi / LBG / Adaptive / Poisson-disk samplers ×
+- **Path Finding Modules (50):** Voronoi / LBG / Adaptive / Poisson-disk samplers ×
   Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus Grid
   Halftone, Random Stipple, Spiral, Hatch, Sketch, Streamlines, Composite,
-  Dither Halftone (Floyd-Steinberg), and Circle Packing. Every module's settings
-  are auto-generated from a typed schema (`engine/params.py`).
+  Dither Halftone (Floyd-Steinberg), Shape Dither, Circle Packing, Differential
+  Growth, Quadtree Mosaic, and four raster-driven Tessellations. Every module's
+  settings are auto-generated from a typed schema (`engine/params.py`).
+- **Layer-based image import:** PNG/JPG/BMP/TIFF/WebP imports keep their full,
+  EXIF-correct aspect ratio and become raster layers that can be moved, scaled,
+  rotated, fitted, or filled without destructively cropping the source. Path
+  finding stays attached to the layer and follows its transform.
 - **GPU-first:** setup installs the platform PyTorch build (CUDA on Windows, MPS
   on macOS). `engine/accel.py` uses Torch for the heavy nearest-site /
   weighted-centroid stages when available, falling back to numpy/scipy only when

@@ -3,8 +3,9 @@
 A running list of what this software does. One line each. Updated on every commit.
 
 ## Image input
-- **Image upload** — Load PNG/JPG/BMP/TIFF/WebP; alpha respected (transparent pixels skipped). Shows a loading status while the file uploads.
-- **Source image view** — Original image shown aspect-correct, centered in the page.
+- **Image upload** — Load PNG/JPG/BMP/TIFF/WebP as a new raster composition layer; alpha is respected (transparent pixels are skipped) and loading status is shown while the file uploads.
+- **Non-destructive image placement** — The complete image is fitted and centred inside the drawing area without cropping, then remains freely movable, scalable, and rotatable; Fit and Fill can reframe it at any time.
+- **EXIF-correct photos** — Phone/camera orientation is baked into imported pixels so the layer box, browser preview, and path finding all use the photo's true aspect ratio.
 
 ## Regions (segmentation)
 - **AI segmentation** — Click-to-segment the source image into regions (`/api/segmentation/predict`).
@@ -14,7 +15,9 @@ A running list of what this software does. One line each. Updated on every commi
 - **Region masks** — Per-region alpha mask applied to the source for isolated path finding.
 
 ## Path Finding Modules (PFMs)
-- **49 PFMs** — Voronoi / LBG / Adaptive / Poisson-disk samplers × Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus Grid Halftone, Random Stipple, Spiral, Hatch, Sketch (Lines/Curves/Squares), Streamlines (Flow/Edge/Superformula), Composite (Layers/Mosaic), Dither Halftone (Floyd-Steinberg error diffusion), Circle Packing, and Tessellations (Isometric Y / Hex Aperture / Truchet Weave / Diamond Lattice).
+- **50 PFMs** — Voronoi / LBG / Adaptive / Poisson-disk samplers × Stippling, Dashes, Shapes, Triangulation, Tree, Diagram, TSP styles, plus Grid Halftone, Random Stipple, Spiral, Hatch, Sketch (Lines/Curves/Squares), Streamlines (Flow/Edge/Superformula/Engraving), Composite (Layers/Mosaic/Quadtree), Dither Halftone, Shape Dither, Circle Packing, Differential Growth, and Tessellations (Isometric Y / Hex Aperture / Truchet Weave / Diamond Lattice).
+- **Shape Dither** — Stamp circles, squares, stars, triangles, crosses, or uploaded SVG artwork on an image-sampled grid. Control aspect, resolution, tone levels, Floyd–Steinberg error diffusion, tone response, scale, gradient-following quarter-turn rotation, shape colour, and an export-only background colour.
+- **Custom dither shapes** — Upload a single SVG shape directly, or bake up to 32 tone states from Cavalry; installed shapes persist in the library and appear as their own Shape Dither styles.
 - **Raster-driven tessellations** — Four periodic vector patterns morph their geometry from each tile's average source tone. Scale, rotation, phase, response, inversion, and duplicate-edge cleanup remain editable per layer.
 - **Poisson-disk sampler** — Blue-noise dart-throwing with a hard minimum-distance guarantee (`engine/sampling.py`), unlike the probabilistic thinning `Adaptive` uses; reuses all 7 styles like Voronoi/LBG/Adaptive.
 - **Schema-driven params** — Every PFM's controls auto-generated from a typed schema (`engine/params.py`).
@@ -38,6 +41,8 @@ A running list of what this software does. One line each. Updated on every commi
 - **Display modes** — Show a layer as raster, pathfinding paths, or both.
 - **Layer raster preview** — Served raster matches what the pathfinder analysed (aspect-correct, aligns with paths).
 - **Transform** — Move and scale layers in the viewport with handles.
+- **Rotate, Fit & Fill** — Rotate any layer numerically, fit the whole layer inside the padded drawing area, or fill the area and let export/plot clip overflow at the page edge.
+- **Raster-layer path finding** — Generate strokes from an imported layer's own uncropped pixels; raster and paths share the same local transform and can be displayed separately or together.
 - **Crop & mask** — Rectangle crop and rect/pen masks per layer; crop-to-content.
 - **Occlusion** — Upper layers knock out lower layers along their actual mask/region outline (traced polygon), not just a bounding box.
 

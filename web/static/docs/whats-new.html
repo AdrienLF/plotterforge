@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Review Plotter Studio workflow changes from July 2026, including raster layers, Shape Dither, EXIF handling, and documentation compatibility.">
+<title>What’s new · Plotter Studio Manual</title>
+<link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
+</head>
+<body>
+<main class="wrap">
+
+<nav class="crumbs"><a href="index.html">Manual</a> › What’s new</nav>
+
+<header class="hero">
+  <div class="kicker">Plotter Studio · July 2026</div>
+  <h1>A more physical image workflow</h1>
+  <p class="lede">Recent changes make imported photographs behave like real composition objects and add a new symbol-based path-finding language. This page explains what changed, not every commit.</p>
+</header>
+
+<h2>Transformable raster layers</h2>
+<p>Importing a PNG, JPEG, BMP, TIFF or WebP now creates a selected raster layer. The complete image is fitted into the drawing area without cropping, and it owns the pixels used by its Path Finding settings.</p>
+<ul>
+  <li>Move, scale and rotate the image independently.</li>
+  <li>Use <strong>Fit and Fill</strong> to preserve the whole image or cover the padded drawing area.</li>
+  <li>Choose Raster, Paths or Both without losing the source.</li>
+  <li>Generated strokes remain in the layer’s local space, so they follow every later transform.</li>
+  <li>Off-page overflow remains visible while composing, then clips to the page for SVG export and plotting.</li>
+</ul>
+
+<h2>Shape Dither</h2>
+<p>Shape Dither quantizes image tone into a grid of symbols. Built-in circles, squares, stars, triangles, crosses and rounded squares can change scale with tone and rotate to the local image gradient in 90° steps.</p>
+<ul>
+  <li>Two to 32 tone levels, with optional Floyd–Steinberg error diffusion.</li>
+  <li>Original-aspect or centred square sampling.</li>
+  <li>Independent shape and export-only background colours.</li>
+  <li>Direct SVG upload for a single scalable state.</li>
+  <li>Cavalry baking for up to 32 real vector states with optional source colours.</li>
+</ul>
+
+<h2>EXIF orientation</h2>
+<p>Phone and camera orientation is now baked into imported pixels. The browser preview, layer box, path-finding raster and saved project all see the same width, height and aspect ratio instead of relying on different interpretations of EXIF orientation.</p>
+
+<h2>Compatibility notes</h2>
+<table>
+  <tr><th>Existing work</th><th>What to expect</th></tr>
+  <tr><td>Projects made before raster layers</td><td>Existing SVG/path-finding layers continue to load. Re-import the original photograph if you want independent raster transforms.</td></tr>
+  <tr><td>Old rotated phone photos</td><td>Re-import from the original file to bake EXIF orientation and rebuild the correct layer bounds.</td></tr>
+  <tr><td>Custom tessellations</td><td>Unchanged. They remain in the Tessellation family and retain their stable IDs.</td></tr>
+  <tr><td>Uploaded dither shapes</td><td>They persist in the local Shape Library and appear as custom Shape Dither styles.</td></tr>
+  <tr><td>Physical plot output</td><td>Background rectangles marked export-only are ignored by plot parsing and pen splitting.</td></tr>
+</table>
+
+<h2>Documentation version</h2>
+<p>This manual describes the built-in registry and interface current on <strong>15 July 2026</strong>. The navigation header displays <em>July 2026</em>; the generated <a href="reference.html">PFM reference</a> is checked directly against the engine.</p>
+
+<footer>Start with the <a href="tutorials.html">updated tutorials</a> or review <a href="troubleshooting.html">Troubleshooting</a> before the next physical plot.</footer>
+
+</main>
+</body>
+</html>

@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Start here to turn an image or procedural drawing into a layered, pen-ready Plotter Studio project.">
 <title>Plotter Studio · Manual</title>
 <link rel="stylesheet" href="docs.css">
+<script src="docs.js" defer></script>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
 <header class="hero">
   <div class="kicker">Plotter Studio · Manual</div>
@@ -19,9 +21,15 @@
   </p>
 </header>
 
+<h2>Pick your route</h2>
+<div class="cards">
+  <a class="card" href="tutorials.html"><strong>Make a complete drawing</strong><p>Three controlled projects with bundled source, exact settings, checkpoints and pre-flight.</p></a>
+  <a class="card" href="choose-a-style.html"><strong>Choose the right style</strong><p>Decide by subject, pen width, visual language and plotting cost.</p></a>
+</div>
+
 <figure>
-  <img src="img/overview.png" alt="The Plotter Studio window: menu bar, workflow steps, viewport with a stippled A3 page, and the dock with Layers, Drawing Area, Pens and Versions panels.">
-  <figcaption>The studio. Left: tool rail and the page. Right: the dock — Layers, Drawing Area, Pens, Versions. Top: the three workflow steps.</figcaption>
+  <img src="img/overview.png" alt="The current Plotter Studio Compose view with a rotated blue Shape Dither raster, two layers, and X, Y, size, scale, rotation, Fit, Fill, crop and mask controls.">
+  <figcaption>The studio. Left: the page and tool rail. Right: stacked layers and precise placement controls, including the new Rotate, Fit and Fill workflow. Top: Compose, Generate and Plot.</figcaption>
 </figure>
 
 <h2>The three steps</h2>
@@ -30,7 +38,7 @@
   to right, and you can hop back at any time:
 </p>
 <div class="cards">
-  <a class="card" href="compose.html"><strong>1 · Compose</strong><p>The home base: stack layers on the page — image-driven strokes (43 styles), moves, crops, masks, occlusion.</p></a>
+  <a class="card" href="compose.html"><strong>1 · Compose</strong><p>The home base: stack layers on the page — raster images, 50 path-finding styles, transforms, masks and occlusion.</p></a>
   <a class="card" href="create.html#generate"><strong>2 · Generate</strong><p>Procedural, image-free drawings: geometric compositions and shape fields.</p></a>
   <a class="card" href="plot.html"><strong>3 · Plot</strong><p>Estimate, place on paper, and drive the plotter — pens, speeds, copies, resume.</p></a>
 </div>
@@ -43,8 +51,8 @@
 
 <h2>Your first plot, in five minutes</h2>
 <ol class="steps">
-  <li><strong>Import an image</strong> — <em>File → Import image…</em> or the 🖼 button on the left rail. JPEG/PNG for path finding; an SVG import lands directly as a composition layer.</li>
-  <li><strong>Add a path-finding layer</strong> — in the Layers panel click <strong>＋ Path finding</strong>. Pick a module (start with <em>Voronoi Stippling</em>), tweak, hit <strong>Apply / Regenerate</strong>. The page preview shows real pen strokes.</li>
+  <li><strong>Import an image</strong> — <em>File → Import image…</em> or the 🖼 button on the left rail. A JPEG/PNG becomes a selected raster layer, fitted without cropping and ready to move, resize or rotate; an SVG becomes a vector layer.</li>
+  <li><strong>Apply path finding</strong> — click the imported layer's <strong>⚙</strong> (or <strong>＋ Path finding</strong> for another layer). Pick a module — start with <em>Voronoi Stippling</em> — then hit <strong>Apply / Regenerate</strong>. The strokes stay aligned with the image as you transform the layer.</li>
   <li><strong>Set your pens</strong> — in the Pens panel choose colour and stroke width (mm). The preview redraws with true widths; a flat nib even renders its calligraphic angle.</li>
   <li><strong>Check the page</strong> — Drawing Area sets the paper size, margins and how the image fits. A4/A3 guides are drawn on the canvas.</li>
   <li><strong>Plot</strong> — open the <em>Plot</em> step: connect the port in <em>Setup</em>, read the time estimate, position the drawing on the paper, press <strong>Start</strong>.</li>
@@ -56,7 +64,8 @@
   <tr><td>Zoom</td><td>Scroll wheel — zooms toward the cursor.</td></tr>
   <tr><td>Pan</td><td>Drag anywhere on the canvas background.</td></tr>
   <tr><td>Fit page</td><td><em>Fit</em> button (top right) or the ⤢ rail button.</td></tr>
-  <tr><td>Move a layer</td><td>Drag it. Edges snap to the page and to other layers; the toolbar's align buttons line up selected layers precisely.</td></tr>
+  <tr><td>Move or resize a layer</td><td>Drag it or its corner handles. Edges snap to the page and other layers; the toolbar's align buttons place it precisely.</td></tr>
+  <tr><td>Rotate / Fit / Fill</td><td>Use <em>Rotate °</em> in Layers, or <em>Area → Fit / Fill</em> to centre the whole layer or cover the padded drawing area.</td></tr>
   <tr><td>Nudge placement</td><td>The X/Y readout in the toolbar shows the plot placement in mm.</td></tr>
   <tr><td>Stop anything</td><td>The red ■ on the rail halts processing or plotting.</td></tr>
   <tr><td>Undo</td><td><kbd>⌘Z</kbd> / <kbd>Ctrl+Z</kbd> (or Edit → Undo) restores the composition after a layer delete or an unwanted regenerate — up to ten steps back.</td></tr>
@@ -102,6 +111,6 @@
   In-app tutorial: <strong>Help → ✦ Tutorial</strong>
 </footer>
 
-</div>
+</main>
 </body>
 </html>
